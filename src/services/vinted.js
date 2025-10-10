@@ -33,16 +33,25 @@ class VintedService {
       await this.handleCookieBanner(page);
 
       // Click "Einloggen" button in header
-      logger.info('Clicking login button in header...');
-      const loginButtonSelectors = [
-        'button[data-testid="header-login-button"]',
-        'a[href*="/member/login"]'
-      ];
+logger.info('Clicking login button in header...');
+
+// Wait a bit more for page to fully load
+await puppeteerService.randomDelay(2000, 3000);
+
+const loginButtonSelectors = [
+  'button[data-testid="header-login-button"]',
+  'a[data-testid="header-login-button"]',
+  'a[href="/member/general/login"]',
+  'a[href*="/member/login"]',
+  'button:has-text("Einloggen")',
+  'a:has-text("Einloggen")',
+  '.web_ui__Button__button:has-text("Einloggen")'
+];
 
       let loginButtonClicked = false;
       for (const selector of loginButtonSelectors) {
         try {
-          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.waitForSelector(selector, { timeout: 5000 });
           await page.click(selector);
           logger.info(`Clicked login button: ${selector}`);
           loginButtonClicked = true;
