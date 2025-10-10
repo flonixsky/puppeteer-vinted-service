@@ -31,6 +31,8 @@ app.use((req, res, next) => {
 app.get('/health', healthController.checkHealth);
 app.get('/ready', healthController.checkReadiness);
 // Login Routes
+// Cookie Upload Route
+app.post('/cookies/upload', loginController.uploadCookies);
 app.post('/login', loginController.loginToVinted);
 app.get('/session/status', loginController.getSessionStatus);
 app.delete('/session/:sessionId', loginController.invalidateSession);

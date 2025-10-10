@@ -152,5 +152,65 @@ class LoginController {
     }
   }
 }
+async uploadCookies(req, res) {
+    try {
+      const { cookies, email } = req.body;
 
+      if (!cookies || !Array.isArray(cookies) || cookies.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cookies array is required'
+        });
+      }
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          error: 'Email is required'
+        });
+      }
+
+      logger.info('Uploading manual cookies', { 
+        email, 
+        cookieCount: cookies.length 
+      });
+
+      // Get user agent from request or use default
+      const userAgent = req.headers['user-agent'] || 
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+      // Save to database
+      const session = await supabaseService.saveSession(
+        email,
+        cookies,
+        userAgent
+      );
+
+      logger.info('Manual cookies saved successfully', {
+        sessionId: session.id
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Cookies uploaded and session created',
+        session: {
+          id: session.id,
+          email: session.account_email,
+          validUntil: session.valid_until,
+          cookieCount: cookies.length
+        }
+      });
+
+    } catch (error) {
+      logger.error('Cookie upload error', {
+        error: error.message
+      });
+
+      res.status(500).json({
+        success: false,
+        error: 'Failed to upload cookies',
+        message: error.message
+      });
+    }
+  }
 module.exports = new LoginController();
