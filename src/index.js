@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const logger = require('./utils/logger');
 const healthController = require('./controllers/health');
-
+const loginController = require('./controllers/login');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -30,7 +30,10 @@ app.use((req, res, next) => {
 // Health Checks
 app.get('/health', healthController.checkHealth);
 app.get('/ready', healthController.checkReadiness);
-
+// Login Routes
+app.post('/login', loginController.loginToVinted);
+app.get('/session/status', loginController.getSessionStatus);
+app.delete('/session/:sessionId', loginController.invalidateSession);
 // Root
 app.get('/', (req, res) => {
   res.json({
