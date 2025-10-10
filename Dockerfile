@@ -49,20 +49,25 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy source code
-COPY . .
-
-# Create non-root user for security
+# Create non-root user FIRST
 RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
     && mkdir -p /home/pptruser/Downloads \
     && chown -R pptruser:pptruser /home/pptruser \
     && chown -R pptruser:pptruser /app
 
-# Run as non-root user
+# Set Puppeteer cache path
+ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+
+# Switch to pptruser
 USER pptruser
+
+# Install dependencies and Chrome (NUR EINMAL!)
+RUN npm ci --only=production && \
+    npx puppeteer browsers install chrome && \
+    npm cache clean --force
+
+# Copy source code (NACH npm install!)
+COPY --chown=pptruser:pptruser . .
 
 # Expose port
 EXPOSE 3001
