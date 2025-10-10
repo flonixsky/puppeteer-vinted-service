@@ -38,9 +38,9 @@ class VintedService {
       // Fill login form
       logger.info('Filling login form...');
       
-      const emailSelector = 'input[name="login"], input[type="email"]';
-      const passwordSelector = 'input[name="password"], input[type="password"]';
-      const submitSelector = 'button[type="submit"]';
+      const emailSelector = 'input#username, input[name="username"]';
+	const passwordSelector = 'input#password, input[name="password"]';
+	const submitSelector = 'button[type="submit"]';
 
       // Email
       const emailSuccess = await puppeteerService.humanType(page, emailSelector, email);
