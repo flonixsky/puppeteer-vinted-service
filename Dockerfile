@@ -50,7 +50,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install dependencies and Puppeteer browser
+RUN npm ci --only=production && \
+    npx puppeteer browsers install chrome && \
+    npm cache clean --force
 
 # Copy source code
 COPY . .
