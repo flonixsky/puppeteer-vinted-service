@@ -8,7 +8,7 @@ class LoginController {
 
     try {
       const { email, password } = req.body;
-
+      
       // Validation
       if (!email || !password) {
         return res.status(400).json({
@@ -64,7 +64,7 @@ class LoginController {
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      
+
       logger.error('Login endpoint error', {
         error: error.message,
         stack: error.stack,
@@ -110,7 +110,7 @@ class LoginController {
       logger.error('Session status check error', {
         error: error.message
       });
-
+                                          
       res.status(500).json({
         success: false,
         error: 'Failed to check session status',
@@ -151,8 +151,8 @@ class LoginController {
       });
     }
   }
-}
-async uploadCookies(req, res) {
+
+  async uploadCookies(req, res) {
     try {
       const { cookies, email } = req.body;
 
@@ -170,13 +170,13 @@ async uploadCookies(req, res) {
         });
       }
 
-      logger.info('Uploading manual cookies', { 
-        email, 
-        cookieCount: cookies.length 
+      logger.info('Uploading manual cookies', {
+        email,
+        cookieCount: cookies.length
       });
 
       // Get user agent from request or use default
-      const userAgent = req.headers['user-agent'] || 
+      const userAgent = req.headers['user-agent'] ||
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
       // Save to database
@@ -213,4 +213,6 @@ async uploadCookies(req, res) {
       });
     }
   }
+}
+
 module.exports = new LoginController();
