@@ -20,27 +20,55 @@ class VintedService {
       // Create new page
       page = await puppeteerService.createPage();
 
-      // Navigate to login page
-      logger.info('Navigating to Vinted login page...');
-      await page.goto(`${this.baseUrl}/member/login`, {
+      // Navigate to homepage first
+      logger.info('Navigating to Vinted homepage...');
+      await page.goto(this.baseUrl, {
         waitUntil: 'networkidle2',
         timeout: 30000
       });
 
       await puppeteerService.randomDelay(2000, 3000);
 
+      // Handle cookie banner
+      await this.handleCookieBanner(page);
+
+      // Click "Einloggen" button in header
+      logger.info('Clicking login button in header...');
+      const loginButtonSelectors = [
+        'button[data-testid="header-login-button"]',
+        'a[href*="/member/login"]'
+      ];
+
+      let loginButtonClicked = false;
+      for (const selector of loginButtonSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 3000 });
+          await page.click(selector);
+          logger.info(`Clicked login button: ${selector}`);
+          loginButtonClicked = true;
+          await puppeteerService.randomDelay(1500, 2500);
+          break;
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (!loginButtonClicked) {
+        throw new Error('Could not find login button in header');
+      }
+
+      // Wait for modal to appear
+      await puppeteerService.randomDelay(2000, 3000);
+
       // Take screenshot before login
       const screenshotBefore = await puppeteerService.takeScreenshot(page);
-
-      // Handle cookie banner (if present)
-      await this.handleCookieBanner(page);
 
       // Fill login form
       logger.info('Filling login form...');
       
       const emailSelector = 'input#username, input[name="username"]';
-	const passwordSelector = 'input#password, input[name="password"]';
-	const submitSelector = 'button[type="submit"]';
+      const passwordSelector = 'input#password, input[name="password"]';
+      const submitSelector = 'button[type="submit"]';
 
       // Email
       const emailSuccess = await puppeteerService.humanType(page, emailSelector, email);
