@@ -6,7 +6,6 @@ const logger = require('./utils/logger');
 const healthController = require('./controllers/health');
 const loginController = require('./controllers/login');
 const app = express();
-const vintedController = require('./controllers/vinted');
 const PORT = process.env.PORT || 3001;
 
 // Security & Middleware
@@ -34,7 +33,6 @@ app.get('/ready', healthController.checkReadiness);
 // Login Routes
 // Cookie Upload Route
 app.post('/cookies/upload', loginController.uploadCookies);
-app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/login', loginController.loginToVinted);
 app.get('/session/status', loginController.getSessionStatus);
 app.delete('/session/:sessionId', loginController.invalidateSession);

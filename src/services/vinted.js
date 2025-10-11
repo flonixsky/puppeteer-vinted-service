@@ -247,3 +247,174 @@ const loginButtonSelectors = [
 }
 
 module.exports = new VintedService();
+
+  // ========================================
+  // PUBLISH ARTICLE
+  // ========================================
+
+  async publishArticle(article, cookies, userAgent) {
+    const startTime = Date.now();
+    let page = null;
+
+    try {
+      logger.info('Starting Vinted publish', {
+        articleId: article.id,
+        title: article.title
+      });
+
+      page = await puppeteerService.createPage(userAgent);
+
+      // Set cookies
+      await puppeteerService.setCookies(page, cookies);
+
+      // Navigate to upload page
+      logger.info('Navigating to upload page...');
+      await page.goto(`${this.baseUrl}/items/new`, {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      });
+
+      await puppeteerService.randomDelay(2000, 3000);
+
+      // Check if logged in
+      const isLoggedIn = await this.checkIfLoggedIn(page);
+      if (!isLoggedIn) {
+        throw new Error('Not logged in. Cookies might be expired.');
+      }
+
+      // Upload photos
+      logger.info('Uploading photos...');
+      const photoUrl = article.processed_image_url || article.original_image_url;
+      
+      if (!photoUrl) {
+        throw new Error('No image URL found for article');
+      }
+
+      // Download image and upload
+      const imageSelector = 'input[type="file"][accept*="image"]';
+      await page.waitForSelector(imageSelector, { timeout: 10000 });
+      
+      // TODO: Download image from URL and upload as file
+      // For now, we'll skip this and fill other fields
+      
+      logger.info('Filling article details...');
+
+      // Title
+      const titleSelector = 'input[id="title"], input[name="title"]';
+      await puppeteerService.humanType(page, titleSelector, article.title);
+      await puppeteerService.randomDelay(500, 1000);
+
+      // Description
+      const descriptionSelector = 'textarea[id="description"], textarea[name="description"]';
+      if (article.description) {
+        await puppeteerService.humanType(page, descriptionSelector, article.description);
+        await puppeteerService.randomDelay(500, 1000);
+      }
+
+      // Category - click dropdown and select
+      if (article.category) {
+        logger.info('Selecting category...');
+        // Category logic will depend on Vinted's current DOM structure
+        // This is a placeholder
+      }
+
+      // Price
+      if (article.price_recommended) {
+        logger.info('Setting price...');
+        const priceSelector = 'input[id="price"], input[name="price"]';
+        await puppeteerService.humanType(
+          page,
+          priceSelector,
+          article.price_recommended.toString()
+        );
+        await puppeteerService.randomDelay(500, 1000);
+      }
+
+      // Brand
+      if (article.brand) {
+        logger.info('Setting brand...');
+        const brandSelector = 'input[id="brand"], input[name="brand"]';
+        await puppeteerService.humanType(page, brandSelector, article.brand);
+        await puppeteerService.randomDelay(500, 1000);
+      }
+
+      // Size
+      if (article.size) {
+        logger.info('Setting size...');
+        // Size selection logic
+      }
+
+      // Condition
+      if (article.condition) {
+        logger.info('Setting condition...');
+        // Condition selection logic
+      }
+
+      // Color
+      if (article.color) {
+        logger.info('Setting color...');
+        // Color selection logic
+      }
+
+      // Take screenshot before submit
+      const screenshotBefore = await puppeteerService.takeScreenshot(page);
+
+      // Submit (disabled for safety - enable when ready)
+      logger.info('Article filled, ready to submit (currently disabled for testing)');
+      
+      // Uncomment when ready:
+      // const submitSelector = 'button[type="submit"]';
+      // await page.click(submitSelector);
+      // await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
+
+      // Take screenshot after
+      const screenshotAfter = await puppeteerService.takeScreenshot(page);
+
+      // Get final URL
+      const finalUrl = page.url();
+      
+      // Extract Vinted ID from URL (placeholder)
+      const vintedId = 'test-' + Date.now();
+
+      const duration = Date.now() - startTime;
+
+      logger.info('Publish completed', {
+        duration,
+        finalUrl,
+        vintedId
+      });
+
+      await puppeteerService.closeBrowser();
+
+      return {
+        success: true,
+        vintedUrl: finalUrl,
+        vintedId: vintedId,
+        duration,
+        screenshot: screenshotAfter
+      };
+
+    } catch (error) {
+      logger.error('Publish failed', {
+        error: error.message,
+        duration: Date.now() - startTime
+      });
+
+      let errorScreenshot = null;
+      if (page) {
+        errorScreenshot = await puppeteerService.takeScreenshot(page);
+      }
+
+      await puppeteerService.closeBrowser();
+
+      return {
+        success: false,
+        error: error.message,
+        duration: Date.now() - startTime,
+        screenshot: errorScreenshot
+      };
+    }
+  }
+}
+
+module.exports = new VintedService();
