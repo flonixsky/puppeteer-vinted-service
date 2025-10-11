@@ -166,8 +166,40 @@ class VintedService {
 
       page = await puppeteerService.createPage(userAgent);
 
+      // WICHTIG: Erst zur Homepage, DANN Cookies setzen!
+      logger.info('Navigating to homepage first...');
+      await page.goto(this.baseUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000
+      });
+
+      await puppeteerService.randomDelay(1000, 2000);
+
+      // Jetzt Cookies setzen
+      logger.info('Setting cookies...');
       await puppeteerService.setCookies(page, cookies);
 
+      await puppeteerService.randomDelay(1000, 2000);
+
+      // Seite neu laden um Cookies zu aktivieren
+      logger.info('Reloading page with cookies...');
+      await page.reload({ waitUntil: 'networkidle2' });
+
+      await puppeteerService.randomDelay(2000, 3000);
+
+      // Screenshot von Homepage mit Cookies
+      const screenshotHome = await puppeteerService.takeScreenshot(page);
+      logger.info('Screenshot taken from homepage');
+
+      // Check ob eingeloggt
+      const isLoggedIn = await this.checkIfLoggedIn(page);
+      logger.info('Login status check', { isLoggedIn });
+
+      if (!isLoggedIn) {
+        throw new Error('Not logged in after setting cookies. Please check cookie validity.');
+      }
+
+      // Jetzt zur Upload-Seite
       logger.info('Navigating to upload page...');
       await page.goto(`${this.baseUrl}/items/new`, {
         waitUntil: 'networkidle2',
@@ -176,10 +208,9 @@ class VintedService {
 
       await puppeteerService.randomDelay(2000, 3000);
 
-      const isLoggedIn = await this.checkIfLoggedIn(page);
-      if (!isLoggedIn) {
-        throw new Error('Not logged in. Cookies might be expired.');
-      }
+      // Screenshot von Upload-Seite
+      const screenshotUpload = await puppeteerService.takeScreenshot(page);
+      logger.info('Screenshot taken from upload page');
 
       logger.info('Filling article details...');
 
@@ -211,11 +242,9 @@ class VintedService {
         await puppeteerService.randomDelay(500, 1000);
       }
 
-      const screenshotBefore = await puppeteerService.takeScreenshot(page);
+      const screenshotFilled = await puppeteerService.takeScreenshot(page);
 
       logger.info('Article filled, ready to submit (currently disabled for testing)');
-
-      const screenshotAfter = await puppeteerService.takeScreenshot(page);
 
       const finalUrl = page.url();
       
@@ -236,7 +265,7 @@ class VintedService {
         vintedUrl: finalUrl,
         vintedId: vintedId,
         duration,
-        screenshot: screenshotAfter
+        screenshot: screenshotFilled
       };
 
     } catch (error) {
@@ -298,24 +327,37 @@ class VintedService {
     try {
       const url = page.url();
 
+      // Prüfe URL
       if (url.includes('/member/login')) {
+        logger.info('On login page - not logged in');
         return false;
       }
 
+      // Warte kurz auf User-Menu
+      await puppeteerService.randomDelay(1000, 2000);
+
+      // Prüfe mehrere Selektoren
       const userMenuSelectors = [
         '[data-testid="user-menu"]',
-        '.user-menu',
-        'a[href*="/member/settings"]'
+        '[data-testid="header-user-menu"]',
+        'button[data-testid="user-menu-button"]',
+        'a[href*="/member/settings"]',
+        '[class*="UserMenu"]'
       ];
 
       for (const selector of userMenuSelectors) {
-        const element = await page.$(selector);
-        if (element) {
-          logger.info('User is logged in');
-          return true;
+        try {
+          const element = await page.$(selector);
+          if (element) {
+            logger.info(`User menu found with selector: ${selector}`);
+            return true;
+          }
+        } catch (e) {
+          continue;
         }
       }
 
+      logger.warn('No user menu elements found');
       return false;
     } catch (error) {
       logger.error('Error checking login status', { error: error.message });
