@@ -5,6 +5,7 @@ const cors = require('cors');
 const logger = require('./utils/logger');
 const healthController = require('./controllers/health');
 const loginController = require('./controllers/login');
+const vintedController = require('./controllers/vinted');
 const app = express();
 const vintedController = require('./controllers/vinted');
 const PORT = process.env.PORT || 3001;
@@ -34,6 +35,8 @@ app.get('/ready', healthController.checkReadiness);
 // Login Routes
 // Cookie Upload Route
 app.post('/cookies/upload', loginController.uploadCookies);
+n// Vinted Publish Route
+app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/login', loginController.loginToVinted);
 app.get('/session/status', loginController.getSessionStatus);
