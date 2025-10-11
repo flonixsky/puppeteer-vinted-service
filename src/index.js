@@ -7,16 +7,13 @@ const healthController = require('./controllers/health');
 const loginController = require('./controllers/login');
 const vintedController = require('./controllers/vinted');
 const app = express();
-const vintedController = require('./controllers/vinted');
 const PORT = process.env.PORT || 3001;
 
-// Security & Middleware
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request Logging
 app.use((req, res, next) => {
   logger.info(`${req.method} ${req.path}`, {
     ip: req.ip,
@@ -25,23 +22,14 @@ app.use((req, res, next) => {
   next();
 });
 
-// ========================================
-// ROUTES
-// ========================================
-
-// Health Checks
 app.get('/health', healthController.checkHealth);
 app.get('/ready', healthController.checkReadiness);
-// Login Routes
-// Cookie Upload Route
 app.post('/cookies/upload', loginController.uploadCookies);
-n// Vinted Publish Route
-app.post('/vinted/publish', vintedController.publishArticle);
-app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/login', loginController.loginToVinted);
 app.get('/session/status', loginController.getSessionStatus);
 app.delete('/session/:sessionId', loginController.invalidateSession);
-// Root
+app.post('/vinted/publish', vintedController.publishArticle);
+
 app.get('/', (req, res) => {
   res.json({
     service: 'Puppeteer Vinted Service',
@@ -50,13 +38,13 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       readiness: '/ready',
-      login: 'POST /login (coming soon)',
-      publish: 'POST /publish (coming soon)'
+      login: 'POST /login',
+      cookiesUpload: 'POST /cookies/upload',
+      vintedPublish: 'POST /vinted/publish'
     }
   });
 });
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
@@ -64,7 +52,6 @@ app.use((req, res) => {
   });
 });
 
-// Error Handler
 app.use((err, req, res, next) => {
   logger.error('Unhandled error', {
     error: err.message,
@@ -74,15 +61,11 @@ app.use((err, req, res, next) => {
 
   res.status(err.status || 500).json({
     error: 'Internal Server Error',
-    message: process.env.NODE_ENV === 'production' 
-      ? 'Something went wrong' 
+    message: process.env.NODE_ENV === 'production'
+      ? 'Something went wrong'
       : err.message
   });
 });
-
-// ========================================
-// GRACEFUL SHUTDOWN
-// ========================================
 
 const server = app.listen(PORT, () => {
   logger.info(`🚀 Puppeteer Vinted Service started on port ${PORT}`);
