@@ -233,60 +233,176 @@ class CategorySelectorService {
    * Select a category at a specific level in the hierarchy
    */
   async selectCategoryLevel(page, categoryName, level) {
+    // Wait for any animations/loading
+    await playwrightService.randomDelay(800, 1200);
+    
     const strategies = [
       {
         name: 'getByText exact match',
         action: async () => {
-          const element = page.getByText(categoryName, { exact: true });
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          // Find all elements with exact text match
+          const elements = await page.getByText(categoryName, { exact: true }).all();
+          
+          // Try each one (there might be multiple, e.g., in different menus)
+          for (const element of elements) {
+            try {
+              await element.waitFor({ state: 'visible', timeout: 3000 });
+              
+              // Check if it's actually visible and not hidden
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                await element.click();
+                logger.info(`  Clicked visible element with exact text: ${categoryName}`);
+                
+                // Wait for next level to load
+                await playwrightService.randomDelay(1000, 1500);
+                return true;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       },
       {
         name: 'getByRole button with name',
         action: async () => {
-          const element = page.getByRole('button', { name: categoryName, exact: true });
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          const elements = await page.getByRole('button', { name: categoryName, exact: true }).all();
+          
+          for (const element of elements) {
+            try {
+              await element.waitFor({ state: 'visible', timeout: 3000 });
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                await element.click();
+                await playwrightService.randomDelay(1000, 1500);
+                return true;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       },
       {
         name: 'getByRole option with name',
         action: async () => {
-          const element = page.getByRole('option', { name: categoryName, exact: true });
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          const elements = await page.getByRole('option', { name: categoryName, exact: true }).all();
+          
+          for (const element of elements) {
+            try {
+              await element.waitFor({ state: 'visible', timeout: 3000 });
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                await element.click();
+                await playwrightService.randomDelay(1000, 1500);
+                return true;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       },
       {
         name: 'Text with partial match (case insensitive)',
         action: async () => {
-          const regex = new RegExp(categoryName, 'i');
-          const element = page.getByText(regex).first();
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          const regex = new RegExp(`^${categoryName}$`, 'i');
+          const elements = await page.getByText(regex).all();
+          
+          for (const element of elements) {
+            try {
+              await element.waitFor({ state: 'visible', timeout: 3000 });
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                await element.click();
+                await playwrightService.randomDelay(1000, 1500);
+                return true;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       },
       {
-        name: 'Locator with text content',
+        name: 'Locator with text content (visible only)',
         action: async () => {
-          const element = page.locator(`button:has-text("${categoryName}")`).first();
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          // Get all matching elements
+          const elements = await page.locator(`button:has-text("${categoryName}"), a:has-text("${categoryName}"), div[role="button"]:has-text("${categoryName}")`).all();
+          
+          for (const element of elements) {
+            try {
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                const text = await element.textContent();
+                // Make sure it's an exact match (not just contains)
+                if (text && text.trim() === categoryName) {
+                  await element.click();
+                  await playwrightService.randomDelay(1000, 1500);
+                  return true;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       },
       {
-        name: 'List item with text',
+        name: 'List item with exact text',
         action: async () => {
-          const element = page.locator(`li:has-text("${categoryName}")`).first();
-          await element.waitFor({ state: 'visible', timeout: 5000 });
-          await element.click();
-          return true;
+          const elements = await page.locator(`li`).all();
+          
+          for (const element of elements) {
+            try {
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                const text = await element.textContent();
+                if (text && text.trim() === categoryName) {
+                  await element.click();
+                  await playwrightService.randomDelay(1000, 1500);
+                  return true;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
+        }
+      },
+      {
+        name: 'Any clickable element with exact text',
+        action: async () => {
+          // Last resort: find ANY element with exact text that might be clickable
+          const elements = await page.locator('*').all();
+          
+          for (const element of elements) {
+            try {
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                const text = await element.textContent();
+                if (text && text.trim() === categoryName) {
+                  // Check if it looks clickable
+                  const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+                  if (['button', 'a', 'li', 'div'].includes(tagName)) {
+                    await element.click();
+                    await playwrightService.randomDelay(1000, 1500);
+                    return true;
+                  }
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
         }
       }
     ];
@@ -298,6 +414,9 @@ class CategorySelectorService {
         const result = await strategy.action();
         if (result) {
           logger.info(`  ✓ Selected "${categoryName}" with: ${strategy.name}`);
+          
+          // Extra wait for next level to fully load
+          await playwrightService.randomDelay(500, 800);
           return true;
         }
       } catch (error) {
@@ -309,6 +428,15 @@ class CategorySelectorService {
     }
 
     logger.error(`Could not select category: ${categoryName} at level ${level}`);
+    
+    // Take debug screenshot
+    try {
+      const debugScreenshot = await playwrightService.takeScreenshot(page);
+      logger.info('Debug screenshot taken for failed category selection');
+    } catch (e) {
+      // Ignore screenshot errors
+    }
+    
     return false;
   }
 }
