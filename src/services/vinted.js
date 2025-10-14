@@ -286,15 +286,84 @@ class VintedService {
 
       const screenshotFilled = await playwrightService.takeScreenshot(page);
 
-      logger.info('Article filled, ready to submit (currently disabled for testing)');
+      logger.info('Article filled, submitting now...');
+
+      // Find and click submit button
+      const submitButtonSelectors = [
+        'button[type="submit"]',
+        'button[data-testid="item-upload-form-button"]',
+        'button[data-testid="submit-button"]',
+        'button.Button--primary',
+        'button:has-text("Hochladen")',
+        'button:has-text("Veröffentlichen")'
+      ];
+
+      let submitSuccess = false;
+      
+      // Try different selectors
+      for (const selector of submitButtonSelectors) {
+        try {
+          const submitButton = page.locator(selector).first();
+          await submitButton.waitFor({ state: 'visible', timeout: 3000 });
+          
+          // Check if button is enabled
+          const isDisabled = await submitButton.getAttribute('disabled');
+          if (isDisabled) {
+            logger.warn(`Submit button found but disabled: ${selector}`);
+            continue;
+          }
+          
+          logger.info(`Clicking submit button: ${selector}`);
+          await submitButton.click();
+          submitSuccess = true;
+          break;
+        } catch (e) {
+          logger.debug(`Submit button not found with selector: ${selector}`);
+          continue;
+        }
+      }
+
+      if (!submitSuccess) {
+        throw new Error('Could not find or click submit button');
+      }
+
+      await playwrightService.randomDelay(2000, 3000);
+
+      // Wait for navigation or success indication
+      logger.info('Waiting for publish to complete...');
+      
+      try {
+        // Wait for URL change (article published)
+        await page.waitForURL(/catalog|items\/\d+/, { timeout: 20000 });
+        logger.info('Navigation detected after submit');
+      } catch (e) {
+        logger.warn('No URL change detected, checking for success indicators...');
+      }
+
+      await playwrightService.randomDelay(2000, 3000);
 
       const finalUrl = page.url();
+      const screenshotAfterSubmit = await playwrightService.takeScreenshot(page);
       
-      const vintedId = 'test-' + Date.now();
+      // Try to extract Vinted article ID from URL
+      let vintedId = null;
+      const urlMatch = finalUrl.match(/items\/(\d+)/);
+      if (urlMatch) {
+        vintedId = urlMatch[1];
+        logger.info('Extracted Vinted ID from URL', { vintedId });
+      } else {
+        // Fallback: check for catalog URL (successful listing)
+        if (finalUrl.includes('/catalog')) {
+          vintedId = 'catalog-' + Date.now();
+          logger.info('Article listed in catalog (no specific ID extracted)');
+        } else {
+          throw new Error('Could not verify article was published successfully');
+        }
+      }
 
       const duration = Date.now() - startTime;
 
-      logger.info('Publish completed', {
+      logger.info('Publish completed successfully', {
         duration,
         finalUrl,
         vintedId
@@ -307,7 +376,7 @@ class VintedService {
         vintedUrl: finalUrl,
         vintedId: vintedId,
         duration,
-        screenshot: screenshotFilled
+        screenshot: screenshotAfterSubmit
       };
 
     } catch (error) {
