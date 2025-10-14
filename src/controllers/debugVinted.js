@@ -1,5 +1,5 @@
 const vintedService = require('../services/vinted');
-const puppeteerService = require('../services/puppeteer');
+const playwrightService = require('../services/playwright');
 const supabaseService = require('../services/supabase');
 const logger = require('../utils/logger');
 
@@ -20,16 +20,16 @@ class DebugVintedController {
       }
       
       // Create page
-      page = await puppeteerService.createPage(session.user_agent);
+      page = await playwrightService.createPage(session.user_agent);
       
       // Go to homepage first
-      await page.goto('https://www.vinted.de', { waitUntil: 'networkidle2', timeout: 30000 });
-      await puppeteerService.setCookies(page, session.cookies);
-      await page.reload({ waitUntil: 'networkidle2' });
+      await page.goto('https://www.vinted.de', { waitUntil: 'networkidle', timeout: 30000 });
+      await playwrightService.setCookies(page, session.cookies);
+      await page.reload({ waitUntil: 'networkidle' });
       
       // Go to upload page
-      await page.goto('https://www.vinted.de/items/new', { waitUntil: 'networkidle2', timeout: 30000 });
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await page.goto('https://www.vinted.de/items/new', { waitUntil: 'networkidle', timeout: 30000 });
+      await playwrightService.randomDelay(2000, 3000);
       
       // Analyze form structure - suche ALLE Forms, nicht nur das erste!
       const formAnalysis = await page.evaluate(() => {
@@ -94,9 +94,9 @@ class DebugVintedController {
       });
       
       // Take screenshot
-      const screenshot = await puppeteerService.takeScreenshot(page);
+      const screenshot = await playwrightService.takeScreenshot(page);
       
-      await puppeteerService.closeBrowser();
+      await playwrightService.closeBrowser();
       
       res.status(200).json({
         success: true,
@@ -108,8 +108,8 @@ class DebugVintedController {
       logger.error('Form inspection failed', { error: error.message });
       
       if (page) {
-        const errorScreenshot = await puppeteerService.takeScreenshot(page);
-        await puppeteerService.closeBrowser();
+        const errorScreenshot = await playwrightService.takeScreenshot(page);
+        await playwrightService.closeBrowser();
         
         return res.status(500).json({
           success: false,
