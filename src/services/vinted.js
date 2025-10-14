@@ -229,16 +229,45 @@ class VintedService {
 
       logger.info('Filling article details...');
 
+      // PHOTO UPLOAD (required - at least 1 photo)
+      if (article.image_urls && Array.isArray(article.image_urls) && article.image_urls.length > 0) {
+        logger.info('Uploading photos...', { count: article.image_urls.length });
+        
+        const uploadResult = await this.uploadPhotos(page, article.image_urls);
+        
+        if (!uploadResult.success) {
+          throw new Error(`Photo upload failed: ${uploadResult.error}`);
+        }
+        
+        logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
+        await playwrightService.randomDelay(2000, 3000);
+      } else {
+        throw new Error('At least one photo is required to publish an article');
+      }
+
+      // VALIDATION: Ensure minimum 5 characters for title and description
+      const title = article.title || '';
+      const description = article.description || '';
+      
+      if (title.length < 5) {
+        throw new Error(`Title must be at least 5 characters long (current: ${title.length})`);
+      }
+      
+      if (description.length < 5) {
+        throw new Error(`Description must be at least 5 characters long (current: ${description.length})`);
+      }
+
       // Title field - use Playwright's more robust methods
+      logger.info('Setting title...', { length: title.length });
       const titleSelector = 'input[id="title"], input[name="title"]';
-      await playwrightService.humanType(page, titleSelector, article.title);
+      await playwrightService.humanType(page, titleSelector, title);
       await playwrightService.randomDelay(500, 1000);
 
-      if (article.description) {
-        const descriptionSelector = 'textarea[id="description"], textarea[name="description"]';
-        await playwrightService.humanType(page, descriptionSelector, article.description);
-        await playwrightService.randomDelay(500, 1000);
-      }
+      // Description field
+      logger.info('Setting description...', { length: description.length });
+      const descriptionSelector = 'textarea[id="description"], textarea[name="description"]';
+      await playwrightService.humanType(page, descriptionSelector, description);
+      await playwrightService.randomDelay(500, 1000);
 
       if (article.price_recommended) {
         logger.info('Setting price...');
@@ -281,6 +310,131 @@ class VintedService {
         logger.info('Setting brand...');
         const brandSelector = 'input[id="brand"], input[name="brand"]';
         await playwrightService.humanType(page, brandSelector, article.brand);
+        await playwrightService.randomDelay(500, 1000);
+      }
+
+      // SIZE field (required)
+      if (article.size || article.ai_analysis?.size) {
+        const size = article.size || article.ai_analysis?.size;
+        logger.info('Setting size...', { size });
+        
+        // Try multiple selectors for size field
+        const sizeSelectors = [
+          'select[id="size"], select[name="size"]',
+          'input[id="size"], input[name="size"]',
+          '[data-testid="size-select"]'
+        ];
+        
+        let sizeSet = false;
+        for (const selector of sizeSelectors) {
+          try {
+            const element = page.locator(selector).first();
+            await element.waitFor({ state: 'visible', timeout: 3000 });
+            
+            // Check if it's a select or input
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            if (tagName === 'select') {
+              await element.selectOption({ label: size });
+            } else {
+              await playwrightService.humanType(page, selector, size);
+            }
+            sizeSet = true;
+            logger.info('Size set successfully');
+            break;
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        if (!sizeSet) {
+          logger.warn('Could not set size field - may be optional or category-specific');
+        }
+        
+        await playwrightService.randomDelay(500, 1000);
+      }
+
+      // CONDITION field (required)
+      if (article.condition || article.ai_analysis?.condition) {
+        const condition = article.condition || article.ai_analysis?.condition;
+        logger.info('Setting condition...', { condition });
+        
+        const conditionSelectors = [
+          'select[id="status"], select[name="status"]',
+          'select[id="condition"], select[name="condition"]',
+          '[data-testid="condition-select"]'
+        ];
+        
+        let conditionSet = false;
+        for (const selector of conditionSelectors) {
+          try {
+            const element = page.locator(selector).first();
+            await element.waitFor({ state: 'visible', timeout: 3000 });
+            
+            // Map condition to Vinted values
+            const conditionMap = {
+              'neu': 'Neu mit Etikett',
+              'sehr gut': 'Sehr gut',
+              'gut': 'Gut',
+              'zufriedenstellend': 'Zufriedenstellend',
+              'new': 'Neu mit Etikett',
+              'very good': 'Sehr gut',
+              'good': 'Gut',
+              'satisfactory': 'Zufriedenstellend'
+            };
+            
+            const vintedCondition = conditionMap[condition.toLowerCase()] || condition;
+            await element.selectOption({ label: vintedCondition });
+            conditionSet = true;
+            logger.info('Condition set successfully', { vintedCondition });
+            break;
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        if (!conditionSet) {
+          logger.warn('Could not set condition field');
+        }
+        
+        await playwrightService.randomDelay(500, 1000);
+      }
+
+      // COLOR field (required)
+      if (article.color || article.ai_analysis?.color) {
+        const color = article.color || article.ai_analysis?.color;
+        logger.info('Setting color...', { color });
+        
+        const colorSelectors = [
+          'select[id="color"], select[name="color"]',
+          'input[id="color"], input[name="color"]',
+          '[data-testid="color-select"]'
+        ];
+        
+        let colorSet = false;
+        for (const selector of colorSelectors) {
+          try {
+            const element = page.locator(selector).first();
+            await element.waitFor({ state: 'visible', timeout: 3000 });
+            
+            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
+            if (tagName === 'select') {
+              // Try to find matching color option
+              await element.selectOption({ label: color });
+            } else {
+              await playwrightService.humanType(page, selector, color);
+            }
+            colorSet = true;
+            logger.info('Color set successfully');
+            break;
+          } catch (e) {
+            continue;
+          }
+        }
+        
+        if (!colorSet) {
+          logger.warn('Could not set color field');
+        }
+        
         await playwrightService.randomDelay(500, 1000);
       }
 
@@ -449,6 +603,113 @@ class VintedService {
     } catch (error) {
       logger.warn('Error handling cookie banner', { error: error.message });
       return false;
+    }
+  }
+
+  async uploadPhotos(page, imageUrls) {
+    const fs = require('fs');
+    const path = require('path');
+    const https = require('https');
+    const http = require('http');
+    
+    try {
+      logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
+      
+      // Find file input element
+      const fileInputSelectors = [
+        'input[type="file"]',
+        'input[accept*="image"]',
+        '[data-testid="photo-upload-input"]'
+      ];
+      
+      let fileInput = null;
+      for (const selector of fileInputSelectors) {
+        try {
+          fileInput = await page.locator(selector).first();
+          await fileInput.waitFor({ state: 'attached', timeout: 3000 });
+          logger.info(`Found file input with selector: ${selector}`);
+          break;
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (!fileInput) {
+        return { success: false, error: 'Could not find file input element' };
+      }
+      
+      const uploadedFiles = [];
+      const tempDir = '/tmp/vinted-uploads';
+      
+      // Create temp directory if it doesn't exist
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Download and upload each image
+      for (let i = 0; i < Math.min(imageUrls.length, 20); i++) { // Max 20 photos
+        const imageUrl = imageUrls[i];
+        logger.info(`Processing image ${i + 1}/${imageUrls.length}`, { url: imageUrl });
+        
+        try {
+          // Download image
+          const filename = `image_${Date.now()}_${i}.jpg`;
+          const filepath = path.join(tempDir, filename);
+          
+          await new Promise((resolve, reject) => {
+            const protocol = imageUrl.startsWith('https') ? https : http;
+            const file = fs.createWriteStream(filepath);
+            
+            protocol.get(imageUrl, (response) => {
+              response.pipe(file);
+              file.on('finish', () => {
+                file.close();
+                resolve();
+              });
+            }).on('error', (err) => {
+              fs.unlink(filepath, () => {});
+              reject(err);
+            });
+          });
+          
+          logger.info(`Downloaded image to ${filepath}`);
+          
+          // Upload to Vinted
+          await fileInput.setInputFiles(filepath);
+          logger.info(`Uploaded image ${i + 1} to Vinted`);
+          
+          uploadedFiles.push(filepath);
+          
+          // Wait for upload to process
+          await playwrightService.randomDelay(1000, 2000);
+          
+        } catch (error) {
+          logger.error(`Failed to process image ${i + 1}`, { error: error.message });
+          // Continue with next image
+        }
+      }
+      
+      // Clean up temp files
+      for (const filepath of uploadedFiles) {
+        try {
+          if (fs.existsSync(filepath)) {
+            fs.unlinkSync(filepath);
+            logger.info(`Deleted temp file: ${filepath}`);
+          }
+        } catch (e) {
+          logger.warn(`Could not delete temp file: ${filepath}`);
+        }
+      }
+      
+      if (uploadedFiles.length === 0) {
+        return { success: false, error: 'No images could be uploaded' };
+      }
+      
+      return { success: true, uploadedCount: uploadedFiles.length };
+      
+    } catch (error) {
+      logger.error('Photo upload failed', { error: error.message });
+      return { success: false, error: error.message };
     }
   }
 
