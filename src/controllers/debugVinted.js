@@ -64,12 +64,12 @@ class DebugVintedController {
           // Check for category-related attributes
           if (text.includes('kategorie') || 
               text.includes('catalog') ||
-              className.toLowerCase().includes('categor') ||
-              className.toLowerCase().includes('catalog') ||
-              id.toLowerCase().includes('categor') ||
-              id.toLowerCase().includes('catalog') ||
-              dataTestId.toLowerCase().includes('categor') ||
-              dataTestId.toLowerCase().includes('catalog')) {
+              (className && className.toLowerCase && className.toLowerCase().includes('categor')) ||
+              (className && className.toLowerCase && className.toLowerCase().includes('catalog')) ||
+              (id && id.toLowerCase().includes('categor')) ||
+              (id && id.toLowerCase().includes('catalog')) ||
+              (dataTestId && dataTestId.toLowerCase().includes('categor')) ||
+              (dataTestId && dataTestId.toLowerCase().includes('catalog'))) {
             
             results.categoryElements.push({
               tag: el.tagName,
