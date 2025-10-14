@@ -229,8 +229,7 @@ class VintedService {
 
       logger.info('Filling article details...');
 
-      // PHOTO UPLOAD (required - at least 1 photo)
-      // Support both image_urls (array) and original_image_url (string)
+      // Prepare image URLs (will upload AFTER filling all other fields)
       let imageUrls = [];
       
       if (article.image_urls && Array.isArray(article.image_urls) && article.image_urls.length > 0) {
@@ -245,16 +244,7 @@ class VintedService {
         throw new Error('At least one photo is required to publish an article (checked: image_urls, original_image_url, processed_image_url)');
       }
       
-      logger.info('Uploading photos...', { count: imageUrls.length, source: article.image_urls ? 'image_urls' : 'original_image_url' });
-      
-      const uploadResult = await this.uploadPhotos(page, imageUrls);
-      
-      if (!uploadResult.success) {
-        throw new Error(`Photo upload failed: ${uploadResult.error}`);
-      }
-      
-      logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
-      await playwrightService.randomDelay(2000, 3000);
+      logger.info('Image URLs prepared, will upload after filling other fields', { count: imageUrls.length });
 
       // VALIDATION: Ensure minimum 5 characters for title and description
       const title = article.title || '';
@@ -449,9 +439,21 @@ class VintedService {
         await playwrightService.randomDelay(500, 1000);
       }
 
+      // PHOTO UPLOAD - Now that all fields are filled, the file input should be visible
+      logger.info('Now uploading photos after filling all fields...', { count: imageUrls.length });
+      
+      const uploadResult = await this.uploadPhotos(page, imageUrls);
+      
+      if (!uploadResult.success) {
+        throw new Error(`Photo upload failed: ${uploadResult.error}`);
+      }
+      
+      logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
+      await playwrightService.randomDelay(2000, 3000);
+
       const screenshotFilled = await playwrightService.takeScreenshot(page);
 
-      logger.info('Article filled, submitting now...');
+      logger.info('Article filled including photos, submitting now...');
 
       // Find and click submit button
       const submitButtonSelectors = [
