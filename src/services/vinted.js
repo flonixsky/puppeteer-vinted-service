@@ -230,20 +230,31 @@ class VintedService {
       logger.info('Filling article details...');
 
       // PHOTO UPLOAD (required - at least 1 photo)
+      // Support both image_urls (array) and original_image_url (string)
+      let imageUrls = [];
+      
       if (article.image_urls && Array.isArray(article.image_urls) && article.image_urls.length > 0) {
-        logger.info('Uploading photos...', { count: article.image_urls.length });
-        
-        const uploadResult = await this.uploadPhotos(page, article.image_urls);
-        
-        if (!uploadResult.success) {
-          throw new Error(`Photo upload failed: ${uploadResult.error}`);
-        }
-        
-        logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
-        await playwrightService.randomDelay(2000, 3000);
-      } else {
-        throw new Error('At least one photo is required to publish an article');
+        imageUrls = article.image_urls;
+      } else if (article.original_image_url) {
+        imageUrls = [article.original_image_url];
+      } else if (article.processed_image_url) {
+        imageUrls = [article.processed_image_url];
       }
+      
+      if (imageUrls.length === 0) {
+        throw new Error('At least one photo is required to publish an article (checked: image_urls, original_image_url, processed_image_url)');
+      }
+      
+      logger.info('Uploading photos...', { count: imageUrls.length, source: article.image_urls ? 'image_urls' : 'original_image_url' });
+      
+      const uploadResult = await this.uploadPhotos(page, imageUrls);
+      
+      if (!uploadResult.success) {
+        throw new Error(`Photo upload failed: ${uploadResult.error}`);
+      }
+      
+      logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
+      await playwrightService.randomDelay(2000, 3000);
 
       // VALIDATION: Ensure minimum 5 characters for title and description
       const title = article.title || '';
