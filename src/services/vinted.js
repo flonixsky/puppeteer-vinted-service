@@ -628,7 +628,39 @@ class VintedService {
     try {
       logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
       
-      // Find file input element - try multiple selectors
+      // FIRST: Click the "Fotos hinzufügen" button to make file input appear
+      logger.info('Looking for "Fotos hinzufügen" button...');
+      
+      const photoButtonSelectors = [
+        'button:has-text("Fotos hinzufügen")',
+        'button:has-text("+ Fotos")',
+        'button:has-text("Foto")',
+        '[data-testid="photo-upload-button"]',
+        'button[class*="photo" i]',
+        'button[class*="upload" i]'
+      ];
+      
+      let buttonClicked = false;
+      for (const selector of photoButtonSelectors) {
+        try {
+          const button = page.locator(selector).first();
+          await button.waitFor({ state: 'visible', timeout: 3000 });
+          await button.click();
+          logger.info(`Clicked photo button: ${selector}`);
+          buttonClicked = true;
+          await playwrightService.randomDelay(1000, 2000);
+          break;
+        } catch (e) {
+          logger.debug(`Photo button not found with selector: ${selector}`);
+          continue;
+        }
+      }
+      
+      if (!buttonClicked) {
+        logger.warn('Could not find "Fotos hinzufügen" button, trying to find file input directly');
+      }
+      
+      // NOW find file input element - try multiple selectors
       const fileInputSelectors = [
         'input[type="file"]',
         'input[accept*="image"]',
