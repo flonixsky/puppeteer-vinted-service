@@ -35,6 +35,7 @@ app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/test/category', categoryTestController.testCategorySelection);
 app.get('/test/categories', categoryTestController.listCategories);
 app.get('/debug/upload-form', debugVintedController.inspectUploadForm.bind(debugVintedController));
+app.post('/debug/category-click', debugVintedController.testCategoryClick.bind(debugVintedController));
 
 app.get('/', (req, res) => {
   res.json({
