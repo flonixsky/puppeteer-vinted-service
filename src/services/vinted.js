@@ -1,4 +1,4 @@
-const puppeteerService = require('./puppeteer');
+const playwrightService = require('./playwright');
 const logger = require('../utils/logger');
 
 class VintedService {
@@ -13,43 +13,56 @@ class VintedService {
     try {
       logger.info('Starting Vinted login', { email });
 
-      page = await puppeteerService.createPage();
+      page = await playwrightService.createPage();
 
       logger.info('Navigating to Vinted homepage...');
       await page.goto(this.baseUrl, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000
       });
 
-      await puppeteerService.randomDelay(2000, 3000);
+      await playwrightService.randomDelay(2000, 3000);
 
       await this.handleCookieBanner(page);
 
       logger.info('Clicking login button in header...');
 
-      await puppeteerService.randomDelay(2000, 3000);
+      await playwrightService.randomDelay(2000, 3000);
 
+      // Try to find and click login button using multiple strategies
       const loginButtonSelectors = [
         'button[data-testid="header-login-button"]',
         'a[data-testid="header-login-button"]',
         'a[href="/member/general/login"]',
-        'a[href*="/member/login"]',
-        'button:has-text("Einloggen")',
-        'a:has-text("Einloggen")',
-        '.web_ui__Button__button:has-text("Einloggen")'
+        'a[href*="/member/login"]'
       ];
 
       let loginButtonClicked = false;
+      
+      // Try with selectors first
       for (const selector of loginButtonSelectors) {
         try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-          await page.click(selector);
+          const element = page.locator(selector).first();
+          await element.waitFor({ state: 'visible', timeout: 5000 });
+          await element.click();
           logger.info(`Clicked login button: ${selector}`);
           loginButtonClicked = true;
-          await puppeteerService.randomDelay(1500, 2500);
+          await playwrightService.randomDelay(1500, 2500);
           break;
         } catch (e) {
           continue;
+        }
+      }
+
+      // Try with text if selectors didn't work
+      if (!loginButtonClicked) {
+        try {
+          await page.getByText('Einloggen', { exact: false }).first().click();
+          logger.info('Clicked login button by text');
+          loginButtonClicked = true;
+          await playwrightService.randomDelay(1500, 2500);
+        } catch (e) {
+          // Continue
         }
       }
 
@@ -57,9 +70,9 @@ class VintedService {
         throw new Error('Could not find login button in header');
       }
 
-      await puppeteerService.randomDelay(2000, 3000);
+      await playwrightService.randomDelay(2000, 3000);
 
-      const screenshotBefore = await puppeteerService.takeScreenshot(page);
+      const screenshotBefore = await playwrightService.takeScreenshot(page);
 
       logger.info('Filling login form...');
 
@@ -67,34 +80,35 @@ class VintedService {
       const passwordSelector = 'input#password, input[name="password"]';
       const submitSelector = 'button[type="submit"]';
 
-      const emailSuccess = await puppeteerService.humanType(page, emailSelector, email);
+      const emailSuccess = await playwrightService.humanType(page, emailSelector, email);
       if (!emailSuccess) {
         throw new Error('Failed to enter email');
       }
 
-      await puppeteerService.randomDelay(500, 1000);
+      await playwrightService.randomDelay(500, 1000);
 
-      const passwordSuccess = await puppeteerService.humanType(page, passwordSelector, password);
+      const passwordSuccess = await playwrightService.humanType(page, passwordSelector, password);
       if (!passwordSuccess) {
         throw new Error('Failed to enter password');
       }
 
-      await puppeteerService.randomDelay(1000, 2000);
+      await playwrightService.randomDelay(1000, 2000);
 
       logger.info('Submitting login form...');
-      await Promise.all([
-        page.click(submitSelector),
-        page.waitForNavigation({
-          waitUntil: 'networkidle2',
-          timeout: 15000
-        }).catch(() => {
-          logger.warn('Navigation timeout after login submit - might be OK');
-        })
-      ]);
+      
+      // Click submit and wait for navigation
+      await page.locator(submitSelector).click();
+      
+      // Wait for navigation with timeout
+      try {
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
+      } catch (e) {
+        logger.warn('Navigation timeout after login submit - might be OK');
+      }
 
-      await puppeteerService.randomDelay(3000, 5000);
+      await playwrightService.randomDelay(3000, 5000);
 
-      const screenshotAfter = await puppeteerService.takeScreenshot(page);
+      const screenshotAfter = await playwrightService.takeScreenshot(page);
 
       const currentUrl = page.url();
       logger.info('Current URL after login', { url: currentUrl });
@@ -103,7 +117,7 @@ class VintedService {
         throw new Error('Login failed - still on login page. Check credentials or CAPTCHA required.');
       }
 
-      const cookies = await puppeteerService.getCookies(page);
+      const cookies = await playwrightService.getCookies(page);
 
       if (cookies.length < 3) {
         throw new Error('Login might have failed - not enough cookies received');
@@ -118,7 +132,7 @@ class VintedService {
         finalUrl: currentUrl
       });
 
-      await puppeteerService.closeBrowser();
+      await playwrightService.closeBrowser();
 
       return {
         success: true,
@@ -140,10 +154,10 @@ class VintedService {
 
       let errorScreenshot = null;
       if (page) {
-        errorScreenshot = await puppeteerService.takeScreenshot(page);
+        errorScreenshot = await playwrightService.takeScreenshot(page);
       }
 
-      await puppeteerService.closeBrowser();
+      await playwrightService.closeBrowser();
 
       return {
         success: false,
@@ -164,31 +178,31 @@ class VintedService {
         title: article.title
       });
 
-      page = await puppeteerService.createPage(userAgent);
+      page = await playwrightService.createPage(userAgent);
 
       // WICHTIG: Erst zur Homepage, DANN Cookies setzen!
       logger.info('Navigating to homepage first...');
       await page.goto(this.baseUrl, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000
       });
 
-      await puppeteerService.randomDelay(1000, 2000);
+      await playwrightService.randomDelay(1000, 2000);
 
       // Jetzt Cookies setzen
       logger.info('Setting cookies...');
-      await puppeteerService.setCookies(page, cookies);
+      await playwrightService.setCookies(page, cookies);
 
-      await puppeteerService.randomDelay(1000, 2000);
+      await playwrightService.randomDelay(1000, 2000);
 
       // Seite neu laden um Cookies zu aktivieren
       logger.info('Reloading page with cookies...');
-      await page.reload({ waitUntil: 'networkidle2' });
+      await page.reload({ waitUntil: 'networkidle' });
 
-      await puppeteerService.randomDelay(2000, 3000);
+      await playwrightService.randomDelay(2000, 3000);
 
       // Screenshot von Homepage mit Cookies
-      const screenshotHome = await puppeteerService.takeScreenshot(page);
+      const screenshotHome = await playwrightService.takeScreenshot(page);
       logger.info('Screenshot taken from homepage');
 
       // Check ob eingeloggt
@@ -202,43 +216,44 @@ class VintedService {
       // Jetzt zur Upload-Seite
       logger.info('Navigating to upload page...');
       await page.goto(`${this.baseUrl}/items/new`, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: 30000
       });
 
-      await puppeteerService.randomDelay(2000, 3000);
+      await playwrightService.randomDelay(2000, 3000);
 
       // Screenshot von Upload-Seite
-      const screenshotUpload = await puppeteerService.takeScreenshot(page);
+      const screenshotUpload = await playwrightService.takeScreenshot(page);
       logger.info('Screenshot taken from upload page');
 
       logger.info('Filling article details...');
 
+      // Title field - use Playwright's more robust methods
       const titleSelector = 'input[id="title"], input[name="title"]';
-      await puppeteerService.humanType(page, titleSelector, article.title);
-      await puppeteerService.randomDelay(500, 1000);
+      await playwrightService.humanType(page, titleSelector, article.title);
+      await playwrightService.randomDelay(500, 1000);
 
       if (article.description) {
         const descriptionSelector = 'textarea[id="description"], textarea[name="description"]';
-        await puppeteerService.humanType(page, descriptionSelector, article.description);
-        await puppeteerService.randomDelay(500, 1000);
+        await playwrightService.humanType(page, descriptionSelector, article.description);
+        await playwrightService.randomDelay(500, 1000);
       }
 
       if (article.price_recommended) {
         logger.info('Setting price...');
         const priceSelector = 'input[id="price"], input[name="price"]';
-        await puppeteerService.humanType(
+        await playwrightService.humanType(
           page,
           priceSelector,
           article.price_recommended.toString()
         );
-        await puppeteerService.randomDelay(500, 1000);
+        await playwrightService.randomDelay(500, 1000);
       }
 
-      // Kategorie-Auswahl
+      // Kategorie-Auswahl - using improved Playwright locators
       if (article.category || article.ai_analysis?.category) {
         logger.info('Selecting category...');
-        const { findBestCategory, navigateToCategory } = require('../utils/categoryMapping');
+        const { findBestCategory } = require('../utils/categoryMapping');
         
         const categoryName = article.category || article.ai_analysis?.category;
         const gender = article.ai_analysis?.gender;
@@ -249,23 +264,24 @@ class VintedService {
           depth: vintedCategory.depth 
         });
         
-        const categorySuccess = await navigateToCategory(page, vintedCategory);
+        // NEW: Use Playwright's better locators for category selection
+        const categorySuccess = await this.navigateToCategoryPlaywright(page, vintedCategory);
         
         if (!categorySuccess) {
           throw new Error(`Failed to navigate to category: ${vintedCategory.full_path}`);
         }
         
-        await puppeteerService.randomDelay(1000, 2000);
+        await playwrightService.randomDelay(1000, 2000);
       }
 
       if (article.brand) {
         logger.info('Setting brand...');
         const brandSelector = 'input[id="brand"], input[name="brand"]';
-        await puppeteerService.humanType(page, brandSelector, article.brand);
-        await puppeteerService.randomDelay(500, 1000);
+        await playwrightService.humanType(page, brandSelector, article.brand);
+        await playwrightService.randomDelay(500, 1000);
       }
 
-      const screenshotFilled = await puppeteerService.takeScreenshot(page);
+      const screenshotFilled = await playwrightService.takeScreenshot(page);
 
       logger.info('Article filled, ready to submit (currently disabled for testing)');
 
@@ -281,7 +297,7 @@ class VintedService {
         vintedId
       });
 
-      await puppeteerService.closeBrowser();
+      await playwrightService.closeBrowser();
 
       return {
         success: true,
@@ -299,10 +315,10 @@ class VintedService {
 
       let errorScreenshot = null;
       if (page) {
-        errorScreenshot = await puppeteerService.takeScreenshot(page);
+        errorScreenshot = await playwrightService.takeScreenshot(page);
       }
 
-      await puppeteerService.closeBrowser();
+      await playwrightService.closeBrowser();
 
       return {
         success: false,
@@ -313,26 +329,149 @@ class VintedService {
     }
   }
 
+  /**
+   * NEW: Improved category navigation using Playwright's better locators
+   */
+  async navigateToCategoryPlaywright(page, vintedCategory) {
+    try {
+      logger.info('Starting category navigation with Playwright', {
+        path: vintedCategory.full_path,
+        depth: vintedCategory.depth
+      });
+
+      // Try to find the category dropdown/button
+      // Using multiple strategies with Playwright's better locators
+      
+      // Strategy 1: Look for text "Wähle eine Kategorie" or similar
+      try {
+        logger.info('Trying to find category selector by text...');
+        const categoryButton = page.getByText('Wähle eine Kategorie', { exact: false }).first();
+        await categoryButton.waitFor({ state: 'visible', timeout: 5000 });
+        await categoryButton.click();
+        logger.info('Clicked category selector button');
+        await playwrightService.randomDelay(1000, 2000);
+      } catch (e) {
+        logger.warn('Strategy 1 (text) failed, trying other methods...', { error: e.message });
+        
+        // Strategy 2: Look for button with role
+        try {
+          logger.info('Trying to find category selector by role...');
+          await page.getByRole('button', { name: /kategorie/i }).first().click();
+          logger.info('Clicked category button by role');
+          await playwrightService.randomDelay(1000, 2000);
+        } catch (e2) {
+          logger.warn('Strategy 2 (role) failed, trying selector...', { error: e2.message });
+          
+          // Strategy 3: Try common selectors
+          const categorySelectors = [
+            '[data-testid="catalog-select"]',
+            '[data-testid="category-select"]',
+            'button[id*="catalog"]',
+            'button[id*="category"]',
+            'div[class*="catalog"] button',
+            'div[class*="category"] button'
+          ];
+          
+          let selectorWorked = false;
+          for (const selector of categorySelectors) {
+            try {
+              logger.info(`Trying selector: ${selector}`);
+              await page.locator(selector).first().click();
+              logger.info(`Clicked category selector: ${selector}`);
+              await playwrightService.randomDelay(1000, 2000);
+              selectorWorked = true;
+              break;
+            } catch (e3) {
+              continue;
+            }
+          }
+          
+          if (!selectorWorked) {
+            throw new Error('Could not find category selector with any strategy');
+          }
+        }
+      }
+
+      // Now navigate through the category hierarchy
+      const pathParts = vintedCategory.full_path.split(' > ');
+      logger.info('Navigating through category path', { parts: pathParts });
+
+      for (let i = 0; i < pathParts.length; i++) {
+        const categoryName = pathParts[i].trim();
+        logger.info(`Selecting category level ${i + 1}: ${categoryName}`);
+
+        try {
+          // Wait for category options to load
+          await playwrightService.randomDelay(500, 1000);
+          
+          // Try to click the category by text
+          await page.getByText(categoryName, { exact: true }).first().click();
+          logger.info(`Clicked category: ${categoryName}`);
+          
+          await playwrightService.randomDelay(1000, 1500);
+        } catch (e) {
+          logger.error(`Failed to select category: ${categoryName}`, { error: e.message });
+          
+          // Take screenshot for debugging
+          const debugScreenshot = await playwrightService.takeScreenshot(page);
+          logger.info('Debug screenshot taken', { screenshot: debugScreenshot ? 'captured' : 'failed' });
+          
+          return false;
+        }
+      }
+
+      logger.info('Category navigation completed successfully');
+      return true;
+
+    } catch (error) {
+      logger.error('Category navigation failed', { error: error.message });
+      
+      // Take screenshot for debugging
+      const debugScreenshot = await playwrightService.takeScreenshot(page);
+      logger.info('Error screenshot taken', { screenshot: debugScreenshot ? 'captured' : 'failed' });
+      
+      return false;
+    }
+  }
+
   async handleCookieBanner(page) {
     try {
       logger.info('Checking for cookie banner...');
 
+      // Try Playwright's getByRole first (more reliable)
+      try {
+        await page.getByRole('button', { name: /akzeptieren|accept/i }).first().click();
+        logger.info('Cookie banner accepted via role');
+        await playwrightService.randomDelay(1000, 2000);
+        return true;
+      } catch (e) {
+        // Continue with other methods
+      }
+
+      // Try by text
+      try {
+        await page.getByText('Akzeptieren', { exact: false }).first().click();
+        logger.info('Cookie banner accepted via text');
+        await playwrightService.randomDelay(1000, 2000);
+        return true;
+      } catch (e) {
+        // Continue with other methods
+      }
+
+      // Try with selectors
       const cookieSelectors = [
         'button[id*="onetrust-accept"]',
-        'button[id*="accept-cookies"]',
-        'button:has-text("Akzeptieren")',
-        'button:has-text("Accept")'
+        'button[id*="accept-cookies"]'
       ];
 
       for (const selector of cookieSelectors) {
         try {
-          const button = await page.$(selector);
-          if (button) {
-            await button.click();
-            logger.info('Cookie banner accepted');
-            await puppeteerService.randomDelay(1000, 2000);
-            return true;
-          }
+          const button = page.locator(selector).first();
+          await button.waitFor({ state: 'visible', timeout: 2000 });
+          await button.click();
+          logger.info('Cookie banner accepted via selector');
+          await playwrightService.randomDelay(1000, 2000);
+          return true;
         } catch (e) {
           continue;
         }
@@ -357,7 +496,17 @@ class VintedService {
       }
 
       // Warte kurz auf User-Menu
-      await puppeteerService.randomDelay(1000, 2000);
+      await playwrightService.randomDelay(1000, 2000);
+
+      // Try with Playwright's getByRole first
+      try {
+        const userMenu = page.getByRole('button', { name: /profil|account|user/i }).first();
+        await userMenu.waitFor({ state: 'visible', timeout: 3000 });
+        logger.info('User menu found via role');
+        return true;
+      } catch (e) {
+        // Continue with other methods
+      }
 
       // Prüfe mehrere Selektoren
       const userMenuSelectors = [
@@ -370,11 +519,10 @@ class VintedService {
 
       for (const selector of userMenuSelectors) {
         try {
-          const element = await page.$(selector);
-          if (element) {
-            logger.info(`User menu found with selector: ${selector}`);
-            return true;
-          }
+          const element = page.locator(selector).first();
+          await element.waitFor({ state: 'visible', timeout: 2000 });
+          logger.info(`User menu found with selector: ${selector}`);
+          return true;
         } catch (e) {
           continue;
         }

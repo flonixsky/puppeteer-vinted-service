@@ -1,7 +1,7 @@
 # Multi-stage build für kleineres Image
 FROM node:18-bullseye-slim AS base
 
-# Puppeteer Dependencies installieren
+# Playwright Dependencies installieren
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -41,6 +41,8 @@ RUN apt-get update && apt-get install -y \
     libxtst6 \
     lsb-release \
     xdg-utils \
+    libdrm2 \
+    libxshmfence1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Working Directory
@@ -55,15 +57,15 @@ RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
     && chown -R pptruser:pptruser /home/pptruser \
     && chown -R pptruser:pptruser /app
 
-# Set Puppeteer cache path
-ENV PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
+# Set Playwright cache path
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.cache/playwright
 
 # Switch to pptruser
 USER pptruser
 
-# Install dependencies and Chrome (NUR EINMAL!)
+# Install dependencies and Chromium browser (NUR EINMAL!)
 RUN npm ci --only=production && \
-    npx puppeteer browsers install chrome && \
+    npx playwright install chromium && \
     npm cache clean --force
 
 # Copy source code (NACH npm install!)

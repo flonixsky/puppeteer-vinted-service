@@ -53,7 +53,7 @@ Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted 
 
 **Backend:**
 - Node.js 18+ / Express
-- Puppeteer (Browser-Automation)
+- Playwright (Browser-Automation) - **NEU seit v2.0**
 - Supabase (PostgreSQL)
 - Docker (via Coolify)
 - n8n (Workflow-Engine)
@@ -68,6 +68,11 @@ Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted 
 - WSL Ubuntu auf Windows
 - Docker Network: `pkkwkkkc04s04s84k8oo0k0o`
 
+**Wichtige Änderung v2.0:**
+- Migration von Puppeteer zu Playwright für bessere React-App-Unterstützung
+- Verbesserte Locators (getByText, getByRole) für stabilere Selektoren
+- Auto-waiting für Elemente (weniger race conditions)
+
 ---
 
 ## 📁 PROJECT STRUCTURE
@@ -81,7 +86,8 @@ Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted 
 │  │  ├─ vinted.js          # 🔥 MAIN FILE - Vinted upload logic
 │  │  └─ categoryTest.js    # Test endpoint (neu)
 │  ├─ services/
-│  │  ├─ puppeteer.js       # Browser wrapper
+│  │  ├─ playwright.js      # 🆕 Browser wrapper (Playwright)
+│  │  ├─ puppeteer.js       # ⚠️ DEPRECATED - wird nicht mehr verwendet
 │  │  ├─ supabase.js        # DB client (getValidSession added)
 │  │  └─ vinted.js          # Vinted-specific helpers
 │  ├─ utils/
@@ -270,10 +276,11 @@ curl -X POST http://localhost:3001/test/category \
 - Auf API-Response warten: `/item_upload/brands?category_id=`
 - Nicht die Top-Navigation anklicken!
 
-**Possible Solutions:**
-- Consider using Playwright instead of Puppeteer (better locators)
-- Consider Claude Computer Use API (AI-powered browser control)
-- Or improve current Puppeteer selectors with better wait logic
+**Lösung (IMPLEMENTIERT in v2.0):**
+- ✅ Migration zu Playwright abgeschlossen
+- ✅ Bessere Locators: `page.getByText()`, `page.getByRole()`
+- ✅ Auto-waiting für Elemente
+- ✅ Stabilere Kategorie-Navigation mit `navigateToCategoryPlaywright()`
 
 ### TASK 2: Implement Photo Upload
 **Goal:** Upload Bilder von Cloudinary zu Vinted
