@@ -286,6 +286,49 @@ async function navigateToCategory(page, category) {
     });
     console.log('  📋 Debug - Clickable elements im Form:', JSON.stringify(debugElements, null, 2));
     
+    // WICHTIG: Kategorie-Dropdown öffnen!
+    console.log('  🔓 Öffne Kategorie-Dropdown...');
+    const dropdownOpened = await page.evaluate(() => {
+      const form = document.querySelector('form');
+      if (!form) return false;
+      
+      // Suche nach "Katalog" oder ähnlichen Triggern
+      const triggers = ['Katalog', 'Kategorie', 'Category', 'Catalog'];
+      const allElements = form.querySelectorAll('button, span, div[role="button"], a, input');
+      
+      for (const trigger of triggers) {
+        for (const el of allElements) {
+          const text = el.textContent.trim();
+          if (text === trigger || text.includes(trigger)) {
+            console.log(`Found trigger: "${text}"`);
+            el.click();
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    
+    if (dropdownOpened) {
+      console.log('  ✅ Kategorie-Dropdown geöffnet, warte auf Kategorien...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // DEBUG: Zeige Elemente NACH Dropdown-Öffnung
+      const debugAfter = await page.evaluate(() => {
+        const form = document.querySelector('form');
+        if (!form) return { error: 'No form' };
+        const clickable = form.querySelectorAll('button, span, div[role="button"], a');
+        const texts = Array.from(clickable)
+          .map(el => el.textContent.trim())
+          .filter(t => t.length > 0 && t.length < 50)
+          .slice(0, 30);
+        return { total: clickable.length, texts: [...new Set(texts)] };
+      });
+      console.log('  📋 Nach Dropdown-Öffnung:', JSON.stringify(debugAfter, null, 2));
+    } else {
+      console.warn('  ⚠️ Kein Kategorie-Dropdown gefunden');
+    }
+    
     // Hauptkategorie
     if (category.hauptkategorie) {
       const mainCat = category.hauptkategorie;
