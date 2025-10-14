@@ -227,9 +227,9 @@ class VintedService {
       const screenshotUpload = await playwrightService.takeScreenshot(page);
       logger.info('Screenshot taken from upload page');
 
-      logger.info('Filling article details...');
+      logger.info('Starting article upload...');
 
-      // Prepare image URLs (will upload AFTER filling all other fields)
+      // PHOTO UPLOAD FIRST - The button is at the TOP of the page!
       let imageUrls = [];
       
       if (article.image_urls && Array.isArray(article.image_urls) && article.image_urls.length > 0) {
@@ -244,7 +244,18 @@ class VintedService {
         throw new Error('At least one photo is required to publish an article (checked: image_urls, original_image_url, processed_image_url)');
       }
       
-      logger.info('Image URLs prepared, will upload after filling other fields', { count: imageUrls.length });
+      logger.info('Uploading photos FIRST (button is at top of page)...', { count: imageUrls.length });
+      
+      const uploadResult = await this.uploadPhotos(page, imageUrls);
+      
+      if (!uploadResult.success) {
+        throw new Error(`Photo upload failed: ${uploadResult.error}`);
+      }
+      
+      logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
+      await playwrightService.randomDelay(2000, 3000);
+
+      logger.info('Now filling other article details...');
 
       // VALIDATION: Ensure minimum 5 characters for title and description
       const title = article.title || '';
@@ -438,18 +449,6 @@ class VintedService {
         
         await playwrightService.randomDelay(500, 1000);
       }
-
-      // PHOTO UPLOAD - Now that all fields are filled, the file input should be visible
-      logger.info('Now uploading photos after filling all fields...', { count: imageUrls.length });
-      
-      const uploadResult = await this.uploadPhotos(page, imageUrls);
-      
-      if (!uploadResult.success) {
-        throw new Error(`Photo upload failed: ${uploadResult.error}`);
-      }
-      
-      logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
-      await playwrightService.randomDelay(2000, 3000);
 
       const screenshotFilled = await playwrightService.takeScreenshot(page);
 
