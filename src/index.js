@@ -6,6 +6,7 @@ const logger = require('./utils/logger');
 const healthController = require('./controllers/health');
 const loginController = require('./controllers/login');
 const categoryTestController = require('./controllers/categoryTest');
+const debugVintedController = require('./controllers/debugVinted');
 const vintedController = require('./controllers/vinted');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -33,6 +34,7 @@ app.delete('/session/:sessionId', loginController.invalidateSession);
 app.post('/vinted/publish', vintedController.publishArticle);
 app.post('/test/category', categoryTestController.testCategorySelection);
 app.get('/test/categories', categoryTestController.listCategories);
+app.get('/debug/upload-form', debugVintedController.inspectUploadForm.bind(debugVintedController));
 
 app.get('/', (req, res) => {
   res.json({
