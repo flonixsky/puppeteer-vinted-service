@@ -1,4 +1,5 @@
 const playwrightService = require('./playwright');
+const categorySelector = require('./categorySelector');
 const logger = require('../utils/logger');
 
 class VintedService {
@@ -264,12 +265,14 @@ class VintedService {
           depth: vintedCategory.depth 
         });
         
-        // NEW: Use Playwright's better locators for category selection
-        const categorySuccess = await this.navigateToCategoryPlaywright(page, vintedCategory);
+        // NEW: Use dedicated CategorySelector service with multiple fallback strategies
+        const categoryResult = await categorySelector.selectCategory(page, vintedCategory);
         
-        if (!categorySuccess) {
-          throw new Error(`Failed to navigate to category: ${vintedCategory.full_path}`);
+        if (!categoryResult.success) {
+          throw new Error(`Failed to navigate to category: ${categoryResult.error}`);
         }
+        
+        logger.info('Category selected successfully');
         
         await playwrightService.randomDelay(1000, 2000);
       }
@@ -326,111 +329,6 @@ class VintedService {
         duration: Date.now() - startTime,
         screenshot: errorScreenshot
       };
-    }
-  }
-
-  /**
-   * NEW: Improved category navigation using Playwright's better locators
-   */
-  async navigateToCategoryPlaywright(page, vintedCategory) {
-    try {
-      logger.info('Starting category navigation with Playwright', {
-        path: vintedCategory.full_path,
-        depth: vintedCategory.depth
-      });
-
-      // Try to find the category dropdown/button
-      // Using multiple strategies with Playwright's better locators
-      
-      // Strategy 1: Look for text "Wähle eine Kategorie" or similar
-      try {
-        logger.info('Trying to find category selector by text...');
-        const categoryButton = page.getByText('Wähle eine Kategorie', { exact: false }).first();
-        await categoryButton.waitFor({ state: 'visible', timeout: 5000 });
-        await categoryButton.click();
-        logger.info('Clicked category selector button');
-        await playwrightService.randomDelay(1000, 2000);
-      } catch (e) {
-        logger.warn('Strategy 1 (text) failed, trying other methods...', { error: e.message });
-        
-        // Strategy 2: Look for button with role
-        try {
-          logger.info('Trying to find category selector by role...');
-          await page.getByRole('button', { name: /kategorie/i }).first().click();
-          logger.info('Clicked category button by role');
-          await playwrightService.randomDelay(1000, 2000);
-        } catch (e2) {
-          logger.warn('Strategy 2 (role) failed, trying selector...', { error: e2.message });
-          
-          // Strategy 3: Try common selectors
-          const categorySelectors = [
-            '[data-testid="catalog-select"]',
-            '[data-testid="category-select"]',
-            'button[id*="catalog"]',
-            'button[id*="category"]',
-            'div[class*="catalog"] button',
-            'div[class*="category"] button'
-          ];
-          
-          let selectorWorked = false;
-          for (const selector of categorySelectors) {
-            try {
-              logger.info(`Trying selector: ${selector}`);
-              await page.locator(selector).first().click();
-              logger.info(`Clicked category selector: ${selector}`);
-              await playwrightService.randomDelay(1000, 2000);
-              selectorWorked = true;
-              break;
-            } catch (e3) {
-              continue;
-            }
-          }
-          
-          if (!selectorWorked) {
-            throw new Error('Could not find category selector with any strategy');
-          }
-        }
-      }
-
-      // Now navigate through the category hierarchy
-      const pathParts = vintedCategory.full_path.split(' > ');
-      logger.info('Navigating through category path', { parts: pathParts });
-
-      for (let i = 0; i < pathParts.length; i++) {
-        const categoryName = pathParts[i].trim();
-        logger.info(`Selecting category level ${i + 1}: ${categoryName}`);
-
-        try {
-          // Wait for category options to load
-          await playwrightService.randomDelay(500, 1000);
-          
-          // Try to click the category by text
-          await page.getByText(categoryName, { exact: true }).first().click();
-          logger.info(`Clicked category: ${categoryName}`);
-          
-          await playwrightService.randomDelay(1000, 1500);
-        } catch (e) {
-          logger.error(`Failed to select category: ${categoryName}`, { error: e.message });
-          
-          // Take screenshot for debugging
-          const debugScreenshot = await playwrightService.takeScreenshot(page);
-          logger.info('Debug screenshot taken', { screenshot: debugScreenshot ? 'captured' : 'failed' });
-          
-          return false;
-        }
-      }
-
-      logger.info('Category navigation completed successfully');
-      return true;
-
-    } catch (error) {
-      logger.error('Category navigation failed', { error: error.message });
-      
-      // Take screenshot for debugging
-      const debugScreenshot = await playwrightService.takeScreenshot(page);
-      logger.info('Error screenshot taken', { screenshot: debugScreenshot ? 'captured' : 'failed' });
-      
-      return false;
     }
   }
 
