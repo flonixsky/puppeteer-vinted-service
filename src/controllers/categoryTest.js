@@ -1,11 +1,11 @@
-const { getBrowser } = require('../services/puppeteer');
+const playwrightService = require('../services/playwright');
 const { getValidSession } = require('../services/supabase');
-const { findBestCategory, navigateToCategory } = require('../utils/categoryMapping');
+const { findBestCategory } = require('../utils/categoryMapping');
+const vintedService = require('../services/vinted');
 const logger = require('../utils/logger');
 
 async function testCategorySelection(req, res) {
   const startTime = Date.now();
-  let browser = null;
   let page = null;
 
   try {
@@ -33,30 +33,28 @@ async function testCategorySelection(req, res) {
       });
     }
 
-    browser = await getBrowser();
-    page = await browser.newPage();
+    page = await playwrightService.createPage(session.user_agent);
 
-    await page.setCookie(...session.cookies);
-    await page.setUserAgent(session.user_agent);
+    await playwrightService.setCookies(page, session.cookies);
 
     logger.info('🌐 Öffne Vinted...');
     await page.goto('https://www.vinted.de/items/new', {
-      waitUntil: 'networkidle0',
+      waitUntil: 'networkidle',
       timeout: 30000
     });
 
-    const screenshot1 = await page.screenshot({ encoding: 'base64' });
+    const screenshot1 = await playwrightService.takeScreenshot(page);
 
-    // Navigiere
+    // Navigiere mit der neuen Playwright-Methode
     logger.info('🎯 Starte Navigation...');
-    const success = await navigateToCategory(page, vintedCategory);
+    const success = await vintedService.navigateToCategoryPlaywright(page, vintedCategory);
 
     if (!success) {
       throw new Error('Navigation fehlgeschlagen');
     }
 
-    await page.waitForTimeout(2000);
-    const screenshot2 = await page.screenshot({ encoding: 'base64' });
+    await playwrightService.randomDelay(2000, 3000);
+    const screenshot2 = await playwrightService.takeScreenshot(page);
 
     // Prüfe Brand-Feld
     const brandFieldVisible = await page.evaluate(() => {
@@ -67,6 +65,8 @@ async function testCategorySelection(req, res) {
     const duration = Date.now() - startTime;
 
     logger.info(`✅ Test erfolgreich in ${duration}ms`);
+
+    await playwrightService.closeBrowser();
 
     res.json({
       success: true,
@@ -92,19 +92,17 @@ async function testCategorySelection(req, res) {
     let errorScreenshot = null;
     if (page) {
       try {
-        errorScreenshot = await page.screenshot({ encoding: 'base64' });
+        errorScreenshot = await playwrightService.takeScreenshot(page);
       } catch (e) {}
     }
+
+    await playwrightService.closeBrowser();
 
     res.status(500).json({
       success: false,
       error: error.message,
       screenshot: errorScreenshot
     });
-
-  } finally {
-    if (page) await page.close();
-    if (browser) await browser.close();
   }
 }
 
