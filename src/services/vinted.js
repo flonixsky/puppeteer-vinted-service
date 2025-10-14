@@ -235,6 +235,29 @@ class VintedService {
         await puppeteerService.randomDelay(500, 1000);
       }
 
+      // Kategorie-Auswahl
+      if (article.category || article.ai_analysis?.category) {
+        logger.info('Selecting category...');
+        const { findBestCategory, navigateToCategory } = require('../utils/categoryMapping');
+        
+        const categoryName = article.category || article.ai_analysis?.category;
+        const gender = article.ai_analysis?.gender;
+        
+        const vintedCategory = findBestCategory(categoryName, gender);
+        logger.info('Selected category', { 
+          vintedCategory: vintedCategory.full_path,
+          depth: vintedCategory.depth 
+        });
+        
+        const categorySuccess = await navigateToCategory(page, vintedCategory);
+        
+        if (!categorySuccess) {
+          throw new Error(`Failed to navigate to category: ${vintedCategory.full_path}`);
+        }
+        
+        await puppeteerService.randomDelay(1000, 2000);
+      }
+
       if (article.brand) {
         logger.info('Setting brand...');
         const brandSelector = 'input[id="brand"], input[name="brand"]';

@@ -78,32 +78,161 @@ function findBestCategory(aiCategory, aiGender = null) {
 }
 
 /**
+ * Klickt auf ein Element mit Retry-Logik und mehreren Selektoren
+ */
+async function clickWithRetry(page, elementText, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`    Versuch ${attempt}/${maxRetries} für "${elementText}"`);
+      
+      // Warte kurz auf DOM-Update
+      await page.waitForTimeout(300);
+      
+      // Strategy 1: Suche innerhalb des Formulars (am wichtigsten!)
+      const clickedInForm = await page.evaluate((text) => {
+        const form = document.querySelector('form');
+        if (!form) return false;
+        
+        const allElements = form.querySelectorAll('button, span, div[role="button"], a');
+        
+        for (const el of allElements) {
+          const elText = el.textContent.trim();
+          
+          // Exakte Übereinstimmung
+          if (elText === text) {
+            // Prüfe Sichtbarkeit
+            const rect = el.getBoundingClientRect();
+            const isVisible = el.offsetParent !== null && 
+                            rect.width > 0 && 
+                            rect.height > 0;
+            
+            if (isVisible) {
+              el.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      }, elementText);
+      
+      if (clickedInForm) {
+        console.log(`    ✓ Gefunden im Formular`);
+        await page.waitForTimeout(500);
+        return true;
+      }
+      
+      // Strategy 2: XPath (sehr präzise für Text-Matching)
+      const xpathSelectors = [
+        `//form//button[normalize-space(text())="${elementText}"]`,
+        `//form//span[normalize-space(text())="${elementText}"]`,
+        `//form//div[@role="button"][normalize-space(text())="${elementText}"]`,
+        `//button[normalize-space(text())="${elementText}"]`,
+        `//span[normalize-space(text())="${elementText}"]`
+      ];
+      
+      for (const xpath of xpathSelectors) {
+        try {
+          const elements = await page.$x(xpath);
+          
+          for (const element of elements) {
+            const isVisible = await element.evaluate(el => {
+              if (!el.offsetParent) return false;
+              const rect = el.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            });
+            
+            if (isVisible) {
+              console.log(`    ✓ Gefunden mit XPath`);
+              await element.click();
+              await page.waitForTimeout(500);
+              return true;
+            }
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      // Strategy 3: Fallback - alle clickable Elements durchsuchen
+      const clickedGlobal = await page.evaluate((text) => {
+        const clickableSelectors = [
+          'button',
+          '[role="button"]',
+          'span[class*="category"]',
+          'div[class*="category"]',
+          'a'
+        ];
+        
+        for (const selector of clickableSelectors) {
+          const elements = document.querySelectorAll(selector);
+          
+          for (const el of elements) {
+            const elText = el.textContent.trim();
+            
+            if (elText === text) {
+              const rect = el.getBoundingClientRect();
+              const isVisible = el.offsetParent !== null && 
+                              rect.width > 0 && 
+                              rect.height > 0;
+              
+              if (isVisible) {
+                el.click();
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }, elementText);
+      
+      if (clickedGlobal) {
+        console.log(`    ✓ Gefunden (global)`);
+        await page.waitForTimeout(500);
+        return true;
+      }
+      
+      // Kein Selector hat funktioniert, warte und retry
+      if (attempt < maxRetries) {
+        console.log(`    ⏳ Element nicht gefunden, warte ${attempt * 500}ms...`);
+        await page.waitForTimeout(attempt * 500);
+      }
+      
+    } catch (error) {
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      console.log(`    ⚠️ Fehler: ${error.message}`);
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Navigiert durch die Kategorie-Hierarchie
  */
 async function navigateToCategory(page, category) {
   console.log(`🎯 Navigiere zu: ${category.full_path}`);
   
   try {
+    // Warte auf Upload-Form
+    await page.waitForSelector('form', { timeout: 10000 });
+    console.log('  ✓ Upload-Formular geladen');
+    
     // Hauptkategorie
     if (category.hauptkategorie) {
       const mainCat = category.hauptkategorie;
       console.log(`  1️⃣ Hauptkategorie: ${mainCat}`);
       
-      const clicked = await page.evaluate((text) => {
-        const spans = Array.from(document.querySelectorAll('[data-testid*="first-category-"]'));
-        const match = spans.find(s => s.textContent.trim() === text);
-        if (match) {
-          match.click();
-          return true;
-        }
-        return false;
-      }, mainCat);
+      // Spezielle Selektoren für Hauptkategorien
+      const clicked = await clickWithRetry(page, mainCat, 3);
       
       if (!clicked) {
         throw new Error(`Hauptkategorie "${mainCat}" nicht gefunden`);
       }
       
-      await page.waitForTimeout(1000);
+      console.log(`    ✅ ${mainCat} ausgewählt`);
+      await page.waitForTimeout(800);
     }
 
     // Unterkategorien
@@ -118,46 +247,59 @@ async function navigateToCategory(page, category) {
       const subCat = subCategories[i];
       console.log(`  ${i + 2}️⃣ Unterkategorie: ${subCat}`);
       
-      await page.waitForTimeout(500);
-      
-      const clicked = await page.evaluate((text) => {
-        const allElements = Array.from(document.querySelectorAll('*'));
-        const match = allElements.find(el => {
-          const elText = el.textContent.trim();
-          return elText === text && el.offsetParent !== null;
-        });
-        
-        if (match) {
-          match.click();
-          return true;
-        }
-        return false;
-      }, subCat);
+      const clicked = await clickWithRetry(page, subCat, 3);
       
       if (!clicked) {
-        console.warn(`⚠️ Unterkategorie "${subCat}" nicht gefunden`);
+        console.warn(`  ⚠️ Unterkategorie "${subCat}" nicht gefunden, fahre fort`);
+        // Nicht abbrechen, weitermachen mit nächster Ebene
+      } else {
+        console.log(`    ✅ ${subCat} ausgewählt`);
       }
       
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(600);
     }
 
-    // Warte auf Brand-API
+    // Warte auf Brand-API (signalisiert dass Kategorie-Felder geladen sind)
     console.log('  ⏳ Warte auf Brand-API...');
     try {
       await page.waitForResponse(
-        response => response.url().includes('/item_upload/brands?category_id='),
-        { timeout: 5000 }
+        response => {
+          const url = response.url();
+          return url.includes('/item_upload/brands?category_id=') ||
+                 url.includes('/categories') ||
+                 url.includes('/catalog');
+        },
+        { timeout: 8000 }
       );
-      console.log('  ✅ Brand-API geladen!');
+      console.log('  ✅ Kategorie-API geladen!');
     } catch (e) {
-      console.warn('  ⚠️ Brand-API Timeout');
+      console.warn('  ⚠️ API Timeout (könnte OK sein)');
     }
 
-    await page.waitForTimeout(1000);
+    // Zusätzlich: Warte auf DOM-Änderungen
+    await page.waitForTimeout(1500);
+    
+    // Verify: Prüfe ob Brand-Feld erschienen ist
+    const brandFieldExists = await page.$('input[name="brand"], input[id="brand"]');
+    if (brandFieldExists) {
+      console.log('  ✅ Brand-Feld ist sichtbar (Kategorie wurde geladen)');
+    } else {
+      console.warn('  ⚠️ Brand-Feld nicht gefunden, aber fahre fort');
+    }
+
     return true;
 
   } catch (error) {
     console.error('❌ Kategorie-Navigation fehlgeschlagen:', error.message);
+    
+    // Screenshot bei Fehler
+    try {
+      const screenshot = await page.screenshot({ encoding: 'base64' });
+      console.error('📸 Screenshot gespeichert (base64)');
+    } catch (e) {
+      // Ignore screenshot errors
+    }
+    
     return false;
   }
 }

@@ -1,0 +1,729 @@
+# Vinted Resell Automation - AI Agent Context
+
+## 🎯 PROJECT MISSION
+Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted Upload → Verkauf
+
+## 📍 CURRENT STATUS (Stand: Oktober 2025)
+
+### ✅ Was funktioniert
+- Backend mit Supabase (PostgreSQL)
+- Cloudinary Bildverwaltung
+- OpenAI Vision API (Produkt-Analyse)
+- Puppeteer Service (Browser-Automation)
+- Cookie-Management (manueller Login via Helper-Script)
+- n8n Workflow für komplette Pipeline
+- **Vinted Upload füllt aus:** Titel + Beschreibung
+
+### 🟡 Was teilweise funktioniert
+- Kategorie-Navigation (hardcoded, buggy, bricht oft ab)
+- Brand-Feld (erscheint erst nach Kategorie)
+
+### ❌ Was noch fehlt
+1. **PRIO 1:** Robuste Kategorie-Auswahl (219 Kategorien, bis zu 5 Ebenen)
+2. **PRIO 2:** Foto-Upload zu Vinted
+3. **PRIO 3:** Alle Felder (Brand, Größe, Farbe, Zustand, Preis)
+4. **PRIO 4:** Submit-Button aktivieren (aktuell absichtlich disabled)
+
+---
+
+## 🏗️ TECH STACK
+
+**Backend:**
+- Node.js 18+ / Express
+- Puppeteer (Browser-Automation)
+- Supabase (PostgreSQL)
+- Docker (via Coolify)
+- n8n (Workflow-Engine)
+
+**APIs:**
+- OpenAI Vision (gpt-4-vision-preview)
+- Cloudinary (Image Storage)
+- Supabase (Database + Storage)
+
+**Deployment:**
+- Git-based (automatisches Deploy via Coolify)
+- WSL Ubuntu auf Windows
+- Docker Network: `pkkwkkkc04s04s84k8oo0k0o`
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+~/puppeteer-vinted-service/
+├─ src/
+│  ├─ controllers/
+│  │  ├─ health.js          # Health checks
+│  │  ├─ login.js           # Cookie management
+│  │  ├─ vinted.js          # 🔥 MAIN FILE - Vinted upload logic
+│  │  └─ categoryTest.js    # Test endpoint (neu)
+│  ├─ services/
+│  │  ├─ puppeteer.js       # Browser wrapper
+│  │  ├─ supabase.js        # DB client (getValidSession added)
+│  │  └─ vinted.js          # Vinted-specific helpers
+│  ├─ utils/
+│  │  ├─ logger.js          # Winston logger
+│  │  ├─ categoryMapping.js # 🆕 Kategorie-Logic (219 Kategorien)
+│  │  └─ vintedCategoriesData.json # 🆕 Alle Vinted-Kategorien
+│  └─ index.js              # Express server + routes
+├─ Dockerfile
+├─ package.json
+├─ .env                     # Secrets (NOT in git!)
+├─ .env.example
+└─ README.md
+```
+
+**Wichtige externe Dateien:**
+- Login Helper: `C:\Users\buris\vinted-login-helper\login.js` (Windows)
+- Test Script: `C:\Users\buris\vinted-upload-test\simple-test.js` (lokaler Test mit sichtbarem Browser)
+
+---
+
+## 🗄️ DATABASE SCHEMA (Supabase)
+
+### Wichtigste Tabellen:
+
+**articles** - Produktdaten
+```sql
+- id, title, description, brand, category, size, color, condition
+- price_min, price_max, price_recommended
+- original_image_url, processed_image_url, image_urls (JSONB)
+- ai_analysis (JSONB), measurements (JSONB)
+- storage_location, status, vinted_id, vinted_url
+- created_at, updated_at, sold_at
+```
+
+**vinted_sessions** - Cookie-Management
+```sql
+- id, account_email, cookies (JSONB), user_agent
+- session_valid, valid_until, last_used, login_attempts
+```
+
+**storage_locations** - Lagerverwaltung
+```sql
+- id (z.B. "A1"), section, position, occupied
+- article_id, occupied_since, notes
+```
+
+---
+
+## 🚀 DEPLOYMENT WORKFLOW
+
+**Nach Code-Änderungen:**
+```bash
+cd ~/puppeteer-vinted-service
+git add .
+git commit -m "Your message"
+git push
+# → Coolify deployed automatisch via Git Webhook
+
+# ⚠️ WICHTIG: Nach JEDEM Redeploy!
+docker network connect pkkwkkkc04s04s84k8oo0k0o puppeteer-vinted-service
+```
+
+**Logs checken:**
+```bash
+docker logs -f puppeteer-vinted-service
+docker logs --tail 50 puppeteer-vinted-service
+```
+
+---
+
+## 🔑 API ENDPOINTS (Port 3001)
+
+**Health:**
+- `GET /health` - Basic health check
+- `GET /ready` - Ready check (DB connection)
+
+**Cookie Management:**
+- `POST /cookies/upload` - Upload Cookies from login helper
+- `GET /session/status` - Check session validity
+
+**Vinted Upload:**
+- `POST /vinted/publish` - Main upload endpoint
+  ```json
+  Body: { "articleId": 1 }
+  Response: { "success": true, "vinted": {...}, "screenshot": "base64..." }
+  ```
+
+**Test Endpoints (neu):**
+- `POST /test/category` - Test category navigation
+- `GET /test/categories` - List all 219 categories
+
+---
+
+## 🐛 CURRENT PROBLEMS & KNOWN ISSUES
+
+### Problem 1: Kategorie-Navigation bricht ab
+**Symptome:**
+- Script klickt falsche Elemente (Top-Navigation statt Formular)
+- Findet Unterkategorien nicht
+- "Jacken" wird nicht gefunden
+
+**Ursache:**
+- Hardcoded Selektoren
+- Vinted hat komplexes dynamisches Formular
+- Kategorie-Modal öffnet sich nicht korrekt
+
+**Lösung (in Arbeit):**
+- `categoryMapping.js` mit intelligentem Finder
+- Wartet auf API-Response: `/item_upload/brands?category_id=`
+- Ignoriert Header-Navigation
+
+### Problem 2: Brand/Größe/Farbe erscheinen nicht
+**Ursache:** Felder laden erst NACH Kategorie-Auswahl
+
+**Lösung:** Erst Kategorie wählen → auf API warten → dann Felder ausfüllen
+
+### Problem 3: Submit ist disabled
+**Status:** Absichtlich! Bis Upload komplett fertig ist.
+**Location:** `src/services/vinted.js` Zeile ~250
+
+---
+
+## 🧪 TESTING
+
+**Lokal testen (mit sichtbarem Browser):**
+```bash
+# Windows CMD:
+cd C:\Users\buris\vinted-upload-test
+node simple-test.js
+
+# Was es macht:
+# 1. Öffnet Chrome (sichtbar)
+# 2. Du loggst dich manuell ein
+# 3. Drückst ENTER
+# 4. Script übernimmt (Kategorie-Navigation + Felder ausfüllen)
+# 5. Browser bleibt 60 Sek offen zum Checken
+```
+
+**API Test (mit Cookies):**
+```bash
+# Erst Login:
+cd C:\Users\buris\vinted-login-helper
+node login.js flonixsky@gmail.com
+
+# Dann Test:
+curl -X POST http://localhost:3001/test/category \
+  -H "Content-Type: application/json" \
+  -d '{"category": "T-Shirt", "gender": "women"}'
+```
+
+---
+
+## 💡 IMPORTANT NOTES FOR AI AGENT
+
+### Code Style Preferences:
+- Use async/await (not callbacks)
+- Prefer try/catch for error handling
+- Use Winston logger (not console.log)
+- Make screenshots on errors for debugging
+- Always wait for dynamic content (Vinted uses React)
+
+### Vinted-Specific Challenges:
+1. **Dynamic Form:** Fields appear based on category selection
+2. **No API:** We reverse-engineer the website (no official API)
+3. **Rate Limiting:** Be careful with requests
+4. **Session Management:** Cookies expire after 7 days
+5. **Category Hierarchy:** Up to 5 levels deep (Damen → Kleidung → Jacken → Bomberjacken)
+
+### When Making Changes:
+1. Test locally first (`simple-test.js`)
+2. Check Docker logs after deploy
+3. Always do network reconnect after Coolify deploy
+4. Take screenshots on errors
+5. Update this file if architecture changes
+
+---
+
+## 🎯 NEXT TASKS (Priority Order)
+
+### TASK 1: Fix Category Navigation 🔥
+**Goal:** Robuste Kategorie-Auswahl für alle 219 Kategorien
+**Files:** `src/utils/categoryMapping.js`, `src/controllers/vinted.js`
+**Challenge:** 
+- Muss dynamisches Modal/Dropdown erkennen
+- Durch bis zu 5 Ebenen navigieren
+- Auf API-Response warten: `/item_upload/brands?category_id=`
+- Nicht die Top-Navigation anklicken!
+
+**Possible Solutions:**
+- Consider using Playwright instead of Puppeteer (better locators)
+- Consider Claude Computer Use API (AI-powered browser control)
+- Or improve current Puppeteer selectors with better wait logic
+
+### TASK 2: Implement Photo Upload
+**Goal:** Upload Bilder von Cloudinary zu Vinted
+**Files:** `src/controllers/vinted.js`
+**Data:** Image URLs are in `articles.image_urls` (JSONB array)
+**Challenge:** Vinted erwartet File Input, wir haben URLs
+
+### TASK 3: Fill All Form Fields
+**Goal:** Brand, Größe, Farbe, Zustand, Preis ausfüllen
+**Data:** Kommt von OpenAI Vision API (`articles.ai_analysis`)
+**Challenge:** Felder erscheinen erst nach Kategorie-Auswahl
+
+### TASK 4: Enable Submit Button
+**Goal:** Artikel wirklich publishen
+**Location:** `src/services/vinted.js` - remove disabled check
+**WARNING:** Erst aktivieren wenn alles andere funktioniert!
+
+---
+
+## 📚 USEFUL COMMANDS
+
+```bash
+# Check running services
+docker ps | grep puppeteer
+
+# View logs
+docker logs -f puppeteer-vinted-service
+
+# Restart service
+docker restart puppeteer-vinted-service
+
+# Network reconnect (after deploy)
+docker network connect pkkwkkkc04s04s84k8oo0k0o puppeteer-vinted-service
+
+# Git workflow
+git status
+git add .
+git commit -m "message"
+git push
+
+# Run local test
+cd ~/vinted-upload-test && node simple-test.js
+
+# Refresh cookies
+cd ~/vinted-login-helper && node login.js flonixsky@gmail.com
+```
+
+---
+
+## 🌐 SERVICE URLS
+
+**From WSL/Host:**
+- n8n: http://localhost:5678
+- Puppeteer: http://localhost:3001
+
+**Docker Internal (between containers):**
+- n8n: http://n8n-pkkwkkkc04s04s84k8oo0k0o:5678
+- Puppeteer: http://puppeteer-vinted-service:3001
+
+---
+
+## 👤 USER INFO
+
+- **Email:** flonixsky@gmail.com
+- **Location:** Dortmund, Germany
+- **Vinted Account:** Same email
+- **Cookie Session:** Stored in `vinted_sessions` table
+
+---
+
+## ⚠️ CRITICAL REMINDERS
+
+1. **Never commit secrets** (.env is in .gitignore)
+2. **Always network reconnect after deploy** (Coolify bug)
+3. **Cookies expire after 7 days** (run login helper)
+4. **Submit is disabled on purpose** (for testing)
+5. **Take screenshots on errors** (debugging Vinted is hard)
+6. **Test locally first** (use simple-test.js before deploy)
+
+---
+
+## 🤖 AI AGENT INSTRUCTIONS
+
+**When asked to implement features:**
+1. Read relevant files first
+2. Understand current implementation
+3. Propose solution before coding
+4. Write clean, commented code
+5. Add error handling + logging
+6. Test locally if possible
+7. Update this file if needed
+
+**When debugging:**
+1. Check Docker logs first
+2. Look for screenshots in responses
+3. Test with local script if applicable
+4. Check if cookies are valid
+5. Verify network connection
+
+**When deploying:**
+1. Git commit with clear message
+2. Push to trigger Coolify deploy
+3. Wait for deploy to finish
+4. Run network reconnect command
+5. Check logs for errors
+6. Test the endpoint
+
+---
+
+**Last Updated:** Oktober 2025  
+**Status:** 🟡 Active Development  
+**Next Milestone:** Complete Vinted Upload Automation# Vinted Resell Automation - AI Agent Context
+
+## 🎯 PROJECT MISSION
+Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted Upload → Verkauf
+
+## 📍 CURRENT STATUS (Stand: Oktober 2025)
+
+### ✅ Was funktioniert
+- Backend mit Supabase (PostgreSQL)
+- Cloudinary Bildverwaltung
+- OpenAI Vision API (Produkt-Analyse)
+- Puppeteer Service (Browser-Automation)
+- Cookie-Management (manueller Login via Helper-Script)
+- n8n Workflow für komplette Pipeline
+- **Vinted Upload füllt aus:** Titel + Beschreibung
+
+### 🟡 Was teilweise funktioniert
+- Kategorie-Navigation (hardcoded, buggy, bricht oft ab)
+- Brand-Feld (erscheint erst nach Kategorie)
+
+### ❌ Was noch fehlt
+1. **PRIO 1:** Robuste Kategorie-Auswahl (219 Kategorien, bis zu 5 Ebenen)
+2. **PRIO 2:** Foto-Upload zu Vinted
+3. **PRIO 3:** Alle Felder (Brand, Größe, Farbe, Zustand, Preis)
+4. **PRIO 4:** Submit-Button aktivieren (aktuell absichtlich disabled)
+
+---
+
+## 🏗️ TECH STACK
+
+**Backend:**
+- Node.js 18+ / Express
+- Puppeteer (Browser-Automation)
+- Supabase (PostgreSQL)
+- Docker (via Coolify)
+- n8n (Workflow-Engine)
+
+**APIs:**
+- OpenAI Vision (gpt-4-vision-preview)
+- Cloudinary (Image Storage)
+- Supabase (Database + Storage)
+
+**Deployment:**
+- Git-based (automatisches Deploy via Coolify)
+- WSL Ubuntu auf Windows
+- Docker Network: `pkkwkkkc04s04s84k8oo0k0o`
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+~/puppeteer-vinted-service/
+├─ src/
+│  ├─ controllers/
+│  │  ├─ health.js          # Health checks
+│  │  ├─ login.js           # Cookie management
+│  │  ├─ vinted.js          # 🔥 MAIN FILE - Vinted upload logic
+│  │  └─ categoryTest.js    # Test endpoint (neu)
+│  ├─ services/
+│  │  ├─ puppeteer.js       # Browser wrapper
+│  │  ├─ supabase.js        # DB client (getValidSession added)
+│  │  └─ vinted.js          # Vinted-specific helpers
+│  ├─ utils/
+│  │  ├─ logger.js          # Winston logger
+│  │  ├─ categoryMapping.js # 🆕 Kategorie-Logic (219 Kategorien)
+│  │  └─ vintedCategoriesData.json # 🆕 Alle Vinted-Kategorien
+│  └─ index.js              # Express server + routes
+├─ Dockerfile
+├─ package.json
+├─ .env                     # Secrets (NOT in git!)
+├─ .env.example
+└─ README.md
+```
+
+**Wichtige externe Dateien:**
+- Login Helper: `C:\Users\buris\vinted-login-helper\login.js` (Windows)
+- Test Script: `C:\Users\buris\vinted-upload-test\simple-test.js` (lokaler Test mit sichtbarem Browser)
+
+---
+
+## 🗄️ DATABASE SCHEMA (Supabase)
+
+### Wichtigste Tabellen:
+
+**articles** - Produktdaten
+```sql
+- id, title, description, brand, category, size, color, condition
+- price_min, price_max, price_recommended
+- original_image_url, processed_image_url, image_urls (JSONB)
+- ai_analysis (JSONB), measurements (JSONB)
+- storage_location, status, vinted_id, vinted_url
+- created_at, updated_at, sold_at
+```
+
+**vinted_sessions** - Cookie-Management
+```sql
+- id, account_email, cookies (JSONB), user_agent
+- session_valid, valid_until, last_used, login_attempts
+```
+
+**storage_locations** - Lagerverwaltung
+```sql
+- id (z.B. "A1"), section, position, occupied
+- article_id, occupied_since, notes
+```
+
+---
+
+## 🚀 DEPLOYMENT WORKFLOW
+
+**Nach Code-Änderungen:**
+```bash
+cd ~/puppeteer-vinted-service
+git add .
+git commit -m "Your message"
+git push
+# → Coolify deployed automatisch via Git Webhook
+
+# ⚠️ WICHTIG: Nach JEDEM Redeploy!
+docker network connect pkkwkkkc04s04s84k8oo0k0o puppeteer-vinted-service
+```
+
+**Logs checken:**
+```bash
+docker logs -f puppeteer-vinted-service
+docker logs --tail 50 puppeteer-vinted-service
+```
+
+---
+
+## 🔑 API ENDPOINTS (Port 3001)
+
+**Health:**
+- `GET /health` - Basic health check
+- `GET /ready` - Ready check (DB connection)
+
+**Cookie Management:**
+- `POST /cookies/upload` - Upload Cookies from login helper
+- `GET /session/status` - Check session validity
+
+**Vinted Upload:**
+- `POST /vinted/publish` - Main upload endpoint
+  ```json
+  Body: { "articleId": 1 }
+  Response: { "success": true, "vinted": {...}, "screenshot": "base64..." }
+  ```
+
+**Test Endpoints (neu):**
+- `POST /test/category` - Test category navigation
+- `GET /test/categories` - List all 219 categories
+
+---
+
+## 🐛 CURRENT PROBLEMS & KNOWN ISSUES
+
+### Problem 1: Kategorie-Navigation bricht ab
+**Symptome:**
+- Script klickt falsche Elemente (Top-Navigation statt Formular)
+- Findet Unterkategorien nicht
+- "Jacken" wird nicht gefunden
+
+**Ursache:**
+- Hardcoded Selektoren
+- Vinted hat komplexes dynamisches Formular
+- Kategorie-Modal öffnet sich nicht korrekt
+
+**Lösung (in Arbeit):**
+- `categoryMapping.js` mit intelligentem Finder
+- Wartet auf API-Response: `/item_upload/brands?category_id=`
+- Ignoriert Header-Navigation
+
+### Problem 2: Brand/Größe/Farbe erscheinen nicht
+**Ursache:** Felder laden erst NACH Kategorie-Auswahl
+
+**Lösung:** Erst Kategorie wählen → auf API warten → dann Felder ausfüllen
+
+### Problem 3: Submit ist disabled
+**Status:** Absichtlich! Bis Upload komplett fertig ist.
+**Location:** `src/services/vinted.js` Zeile ~250
+
+---
+
+## 🧪 TESTING
+
+**Lokal testen (mit sichtbarem Browser):**
+```bash
+# Windows CMD:
+cd C:\Users\buris\vinted-upload-test
+node simple-test.js
+
+# Was es macht:
+# 1. Öffnet Chrome (sichtbar)
+# 2. Du loggst dich manuell ein
+# 3. Drückst ENTER
+# 4. Script übernimmt (Kategorie-Navigation + Felder ausfüllen)
+# 5. Browser bleibt 60 Sek offen zum Checken
+```
+
+**API Test (mit Cookies):**
+```bash
+# Erst Login:
+cd C:\Users\buris\vinted-login-helper
+node login.js flonixsky@gmail.com
+
+# Dann Test:
+curl -X POST http://localhost:3001/test/category \
+  -H "Content-Type: application/json" \
+  -d '{"category": "T-Shirt", "gender": "women"}'
+```
+
+---
+
+## 💡 IMPORTANT NOTES FOR AI AGENT
+
+### Code Style Preferences:
+- Use async/await (not callbacks)
+- Prefer try/catch for error handling
+- Use Winston logger (not console.log)
+- Make screenshots on errors for debugging
+- Always wait for dynamic content (Vinted uses React)
+
+### Vinted-Specific Challenges:
+1. **Dynamic Form:** Fields appear based on category selection
+2. **No API:** We reverse-engineer the website (no official API)
+3. **Rate Limiting:** Be careful with requests
+4. **Session Management:** Cookies expire after 7 days
+5. **Category Hierarchy:** Up to 5 levels deep (Damen → Kleidung → Jacken → Bomberjacken)
+
+### When Making Changes:
+1. Test locally first (`simple-test.js`)
+2. Check Docker logs after deploy
+3. Always do network reconnect after Coolify deploy
+4. Take screenshots on errors
+5. Update this file if architecture changes
+
+---
+
+## 🎯 NEXT TASKS (Priority Order)
+
+### TASK 1: Fix Category Navigation 🔥
+**Goal:** Robuste Kategorie-Auswahl für alle 219 Kategorien
+**Files:** `src/utils/categoryMapping.js`, `src/controllers/vinted.js`
+**Challenge:** 
+- Muss dynamisches Modal/Dropdown erkennen
+- Durch bis zu 5 Ebenen navigieren
+- Auf API-Response warten: `/item_upload/brands?category_id=`
+- Nicht die Top-Navigation anklicken!
+
+**Possible Solutions:**
+- Consider using Playwright instead of Puppeteer (better locators)
+- Consider Claude Computer Use API (AI-powered browser control)
+- Or improve current Puppeteer selectors with better wait logic
+
+### TASK 2: Implement Photo Upload
+**Goal:** Upload Bilder von Cloudinary zu Vinted
+**Files:** `src/controllers/vinted.js`
+**Data:** Image URLs are in `articles.image_urls` (JSONB array)
+**Challenge:** Vinted erwartet File Input, wir haben URLs
+
+### TASK 3: Fill All Form Fields
+**Goal:** Brand, Größe, Farbe, Zustand, Preis ausfüllen
+**Data:** Kommt von OpenAI Vision API (`articles.ai_analysis`)
+**Challenge:** Felder erscheinen erst nach Kategorie-Auswahl
+
+### TASK 4: Enable Submit Button
+**Goal:** Artikel wirklich publishen
+**Location:** `src/services/vinted.js` - remove disabled check
+**WARNING:** Erst aktivieren wenn alles andere funktioniert!
+
+---
+
+## 📚 USEFUL COMMANDS
+
+```bash
+# Check running services
+docker ps | grep puppeteer
+
+# View logs
+docker logs -f puppeteer-vinted-service
+
+# Restart service
+docker restart puppeteer-vinted-service
+
+# Network reconnect (after deploy)
+docker network connect pkkwkkkc04s04s84k8oo0k0o puppeteer-vinted-service
+
+# Git workflow
+git status
+git add .
+git commit -m "message"
+git push
+
+# Run local test
+cd ~/vinted-upload-test && node simple-test.js
+
+# Refresh cookies
+cd ~/vinted-login-helper && node login.js flonixsky@gmail.com
+```
+
+---
+
+## 🌐 SERVICE URLS
+
+**From WSL/Host:**
+- n8n: http://localhost:5678
+- Puppeteer: http://localhost:3001
+
+**Docker Internal (between containers):**
+- n8n: http://n8n-pkkwkkkc04s04s84k8oo0k0o:5678
+- Puppeteer: http://puppeteer-vinted-service:3001
+
+---
+
+## 👤 USER INFO
+
+- **Email:** flonixsky@gmail.com
+- **Location:** Dortmund, Germany
+- **Vinted Account:** Same email
+- **Cookie Session:** Stored in `vinted_sessions` table
+
+---
+
+## ⚠️ CRITICAL REMINDERS
+
+1. **Never commit secrets** (.env is in .gitignore)
+2. **Always network reconnect after deploy** (Coolify bug)
+3. **Cookies expire after 7 days** (run login helper)
+4. **Submit is disabled on purpose** (for testing)
+5. **Take screenshots on errors** (debugging Vinted is hard)
+6. **Test locally first** (use simple-test.js before deploy)
+
+---
+
+## 🤖 AI AGENT INSTRUCTIONS
+
+**When asked to implement features:**
+1. Read relevant files first
+2. Understand current implementation
+3. Propose solution before coding
+4. Write clean, commented code
+5. Add error handling + logging
+6. Test locally if possible
+7. Update this file if needed
+
+**When debugging:**
+1. Check Docker logs first
+2. Look for screenshots in responses
+3. Test with local script if applicable
+4. Check if cookies are valid
+5. Verify network connection
+
+**When deploying:**
+1. Git commit with clear message
+2. Push to trigger Coolify deploy
+3. Wait for deploy to finish
+4. Run network reconnect command
+5. Check logs for errors
+6. Test the endpoint
+
+---
+
+**Last Updated:** Oktober 2025  
+**Status:** 🟡 Active Development  
+**Next Milestone:** Complete Vinted Upload Automation
