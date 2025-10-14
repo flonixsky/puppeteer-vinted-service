@@ -286,47 +286,66 @@ async function navigateToCategory(page, category) {
     });
     console.log('  📋 Debug - Clickable elements im Form:', JSON.stringify(debugElements, null, 2));
     
-    // WICHTIG: Kategorie-Dropdown öffnen!
-    console.log('  🔓 Öffne Kategorie-Dropdown...');
-    const dropdownOpened = await page.evaluate(() => {
+    // WICHTIG: Kategorie-Feld finden und fokussieren
+    console.log('  🔍 Suche Kategorie-Feld...');
+    const categoryFieldInfo = await page.evaluate(() => {
       const form = document.querySelector('form');
-      if (!form) return false;
+      if (!form) return { found: false, error: 'No form' };
       
-      // Suche nach "Katalog" oder ähnlichen Triggern
-      const triggers = ['Katalog', 'Kategorie', 'Category', 'Catalog'];
-      const allElements = form.querySelectorAll('button, span, div[role="button"], a, input');
+      // Suche nach Input/Select Feldern mit category/catalog im Namen
+      const inputs = form.querySelectorAll('input, select, [role="combobox"]');
       
-      for (const trigger of triggers) {
-        for (const el of allElements) {
-          const text = el.textContent.trim();
-          if (text === trigger || text.includes(trigger)) {
-            console.log(`Found trigger: "${text}"`);
-            el.click();
-            return true;
-          }
+      for (const input of inputs) {
+        const id = input.id || '';
+        const name = input.name || '';
+        const placeholder = input.placeholder || '';
+        const ariaLabel = input.getAttribute('aria-label') || '';
+        
+        // Prüfe auf category/catalog/katalog im Namen
+        const searchTerms = [id, name, placeholder, ariaLabel].join(' ').toLowerCase();
+        if (searchTerms.includes('catalog') || 
+            searchTerms.includes('category') || 
+            searchTerms.includes('kategor')) {
+          
+          // Fokussiere und klicke das Feld
+          input.focus();
+          input.click();
+          
+          return {
+            found: true,
+            type: input.tagName,
+            id: input.id,
+            name: input.name,
+            placeholder: input.placeholder
+          };
         }
       }
-      return false;
+      
+      return { found: false, message: 'Kein Kategorie-Feld gefunden' };
     });
     
-    if (dropdownOpened) {
-      console.log('  ✅ Kategorie-Dropdown geöffnet, warte auf Kategorien...');
+    console.log('  📝 Kategorie-Feld:', JSON.stringify(categoryFieldInfo, null, 2));
+    
+    if (categoryFieldInfo.found) {
+      console.log('  ✅ Kategorie-Feld gefunden, warte auf Dropdown...');
       await new Promise(resolve => setTimeout(resolve, 1500));
       
-      // DEBUG: Zeige Elemente NACH Dropdown-Öffnung
+      // DEBUG: Zeige was jetzt sichtbar ist (inkl. Modals/Overlays)
       const debugAfter = await page.evaluate(() => {
-        const form = document.querySelector('form');
-        if (!form) return { error: 'No form' };
-        const clickable = form.querySelectorAll('button, span, div[role="button"], a');
-        const texts = Array.from(clickable)
+        // Suche auch außerhalb des Forms (z.B. Modals)
+        const allClickable = document.querySelectorAll('button, span, div[role="button"], a, [role="option"]');
+        const texts = Array.from(allClickable)
           .map(el => el.textContent.trim())
           .filter(t => t.length > 0 && t.length < 50)
-          .slice(0, 30);
-        return { total: clickable.length, texts: [...new Set(texts)] };
+          .slice(0, 50); // Mehr Elemente zeigen
+        return { 
+          total: allClickable.length, 
+          texts: [...new Set(texts)] 
+        };
       });
-      console.log('  📋 Nach Dropdown-Öffnung:', JSON.stringify(debugAfter, null, 2));
+      console.log('  📋 Nach Feld-Focus (inkl. Modals):', JSON.stringify(debugAfter, null, 2));
     } else {
-      console.warn('  ⚠️ Kein Kategorie-Dropdown gefunden');
+      console.warn('  ⚠️ Kein Kategorie-Feld gefunden');
     }
     
     // Hauptkategorie
