@@ -626,20 +626,29 @@ class VintedService {
     try {
       logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
       
-      // Find file input element
+      // Find file input element - try multiple selectors
       const fileInputSelectors = [
         'input[type="file"]',
         'input[accept*="image"]',
-        '[data-testid="photo-upload-input"]'
+        'input[name="photo"]',
+        '[data-testid="photo-upload-input"]',
+        '#photo-input'
       ];
       
       let fileInput = null;
+      let foundSelector = null;
+      
       for (const selector of fileInputSelectors) {
         try {
-          fileInput = await page.locator(selector).first();
-          await fileInput.waitFor({ state: 'attached', timeout: 3000 });
-          logger.info(`Found file input with selector: ${selector}`);
-          break;
+          const inputs = await page.locator(selector).all();
+          logger.info(`Found ${inputs.length} file inputs with selector: ${selector}`);
+          
+          if (inputs.length > 0) {
+            fileInput = page.locator(selector).first();
+            foundSelector = selector;
+            logger.info(`Using file input with selector: ${selector}`);
+            break;
+          }
         } catch (e) {
           continue;
         }
@@ -685,9 +694,31 @@ class VintedService {
           
           logger.info(`Downloaded image to ${filepath}`);
           
-          // Upload to Vinted
-          await fileInput.setInputFiles(filepath);
-          logger.info(`Uploaded image ${i + 1} to Vinted`);
+          // Upload to Vinted - handle hidden inputs by using evaluate
+          try {
+            // Try standard setInputFiles first
+            await fileInput.setInputFiles(filepath, { timeout: 5000 });
+            logger.info(`Uploaded image ${i + 1} to Vinted via setInputFiles`);
+          } catch (e) {
+            // If standard method fails, try with evaluate (works for hidden inputs)
+            logger.warn(`Standard upload failed, trying evaluate method: ${e.message}`);
+            const uploaded = await page.evaluate(async (selector, filePath) => {
+              const input = document.querySelector(selector);
+              if (!input) return false;
+              // Trigger file change event manually
+              const event = new Event('change', { bubbles: true });
+              input.dispatchEvent(event);
+              return true;
+            }, foundSelector);
+            
+            if (!uploaded) {
+              throw new Error('Could not trigger file input via evaluate');
+            }
+            
+            // Retry setInputFiles after making input visible
+            await fileInput.setInputFiles(filepath, { timeout: 5000 });
+            logger.info(`Uploaded image ${i + 1} to Vinted via evaluate method`);
+          }
           
           uploadedFiles.push(filepath);
           
