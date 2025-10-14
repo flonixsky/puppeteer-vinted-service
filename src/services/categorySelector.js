@@ -20,24 +20,9 @@ class CategorySelectorService {
     const screenshotBefore = await playwrightService.takeScreenshot(page);
     logger.info('Screenshot before category selection taken');
 
-    // Try to open the category dropdown with multiple strategies
-    const dropdownOpened = await this.openCategoryDropdown(page);
-    
-    if (!dropdownOpened) {
-      logger.error('Failed to open category dropdown');
-      const errorScreenshot = await playwrightService.takeScreenshot(page);
-      return {
-        success: false,
-        error: 'Could not open category dropdown',
-        screenshot: errorScreenshot
-      };
-    }
-
-    logger.info('Category dropdown opened successfully');
-    await playwrightService.randomDelay(1000, 1500);
-
     // Navigate through category hierarchy
-    const pathParts = vintedCategory.full_path.split(' > ');
+    // NOTE: Vinted does NOT use a dropdown! Categories are displayed directly on the page
+    const pathParts = vintedCategory.full_path.split(' → ');
     logger.info('Navigating through category path', { parts: pathParts });
 
     for (let i = 0; i < pathParts.length; i++) {
@@ -57,11 +42,12 @@ class CategorySelectorService {
         };
       }
 
-      await playwrightService.randomDelay(800, 1200);
+      // Wait for next level to load (page transition or modal update)
+      await playwrightService.randomDelay(1500, 2000);
     }
 
     // Wait for category to be fully selected (form updates)
-    await playwrightService.randomDelay(1500, 2000);
+    await playwrightService.randomDelay(2000, 2500);
     
     // Take final screenshot
     const screenshotAfter = await playwrightService.takeScreenshot(page);
@@ -237,6 +223,56 @@ class CategorySelectorService {
     await playwrightService.randomDelay(800, 1200);
     
     const strategies = [
+      {
+        name: 'data-testid first-category (Vinted-specific)',
+        action: async () => {
+          // Vinted uses data-testid="first-category-*" for first level categories
+          const elements = await page.locator('[data-testid^="first-category-"]').all();
+          
+          for (const element of elements) {
+            try {
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                const text = await element.textContent();
+                if (text && text.trim() === categoryName) {
+                  logger.info(`  Found via data-testid: ${await element.getAttribute('data-testid')}`);
+                  await element.click();
+                  await playwrightService.randomDelay(1000, 1500);
+                  return true;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
+        }
+      },
+      {
+        name: 'data-testid category (any level)',
+        action: async () => {
+          // Try any element with category-related data-testid
+          const elements = await page.locator('[data-testid*="category"]').all();
+          
+          for (const element of elements) {
+            try {
+              const isVisible = await element.isVisible();
+              if (isVisible) {
+                const text = await element.textContent();
+                if (text && text.trim() === categoryName) {
+                  logger.info(`  Found via data-testid: ${await element.getAttribute('data-testid')}`);
+                  await element.click();
+                  await playwrightService.randomDelay(1000, 1500);
+                  return true;
+                }
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          return false;
+        }
+      },
       {
         name: 'getByText exact match',
         action: async () => {
