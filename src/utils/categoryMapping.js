@@ -268,6 +268,24 @@ async function navigateToCategory(page, category) {
     await page.waitForSelector('form', { timeout: 10000 });
     console.log('  ✓ Upload-Formular geladen');
     
+    // DEBUG: Zeige alle clickable Elemente im Formular
+    const debugElements = await page.evaluate(() => {
+      const form = document.querySelector('form');
+      if (!form) return { error: 'No form found' };
+      
+      const clickable = form.querySelectorAll('button, span, div[role="button"], a');
+      const texts = Array.from(clickable)
+        .map(el => el.textContent.trim())
+        .filter(t => t.length > 0 && t.length < 50) // Filter sinnvolle Texte
+        .slice(0, 30); // Max 30
+      
+      return {
+        total: clickable.length,
+        texts: [...new Set(texts)] // Unique values
+      };
+    });
+    console.log('  📋 Debug - Clickable elements im Form:', JSON.stringify(debugElements, null, 2));
+    
     // Hauptkategorie
     if (category.hauptkategorie) {
       const mainCat = category.hauptkategorie;
