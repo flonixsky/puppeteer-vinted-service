@@ -3,7 +3,7 @@
 ## 🎯 PROJECT MISSION
 Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted Upload → Verkauf
 
-## 📍 CURRENT STATUS (Stand: Oktober 2025)
+## 📍 CURRENT STATUS (Stand: 14. Oktober 2025, 16:09 Uhr)
 
 ### ✅ Was funktioniert
 - Backend mit Supabase (PostgreSQL)
@@ -13,13 +13,36 @@ Automatisiere den kompletten Reselling-Workflow: Foto → KI-Analyse → Vinted 
 - Cookie-Management (manueller Login via Helper-Script)
 - n8n Workflow für komplette Pipeline
 - **Vinted Upload füllt aus:** Titel + Beschreibung
+- **Auto-Reconnect Script:** Network-Connection nach Coolify-Restart (Cron-Job alle 5 Min)
+- **Debug-Endpoint:** GET /debug/upload-form (analysiert Upload-Formular)
+- **Kategorie-Mapping:** 219 Vinted-Kategorien mit Scoring-System (src/utils/categoryMapping.js)
+
+### ❌ HAUPTPROBLEM: Kategorie-Navigation bricht ab
+
+**Root Cause:**
+- Puppeteer findet das "Wähle eine Kategorie" Dropdown nicht
+- Vinted nutzt komplexes React-basiertes Custom Component
+- Standard-Selektoren (button, input, [role="button"]) funktionieren nicht
+- Debug zeigt: Form wird gefunden, aber Kategorie-Feld nicht erkennbar
+
+**Debugging bisherige Versuche:**
+1. ❌ "Katalog" Button anklicken → öffnet falsche Navigation (Header statt Form)
+2. ❌ Input-Felder mit "catalog"/"category" suchen → kein Match
+3. ❌ Debug-Endpoint zeigt nur 1 Input (search_text) im Form
+4. ⚠️ "Wähle eine Kategorie" existiert laut User, aber Puppeteer findet es nicht
+
+**Nächste Lösung: PLAYWRIGHT statt Puppeteer**
+- Bessere Locators (page.locator('text=Wähle eine Kategorie'))
+- Stabilere Selektoren für React-Apps
+- Auto-waiting & besseres Error-Handling
+- Playwright hat besseres DevTools-Debugging
 
 ### 🟡 Was teilweise funktioniert
-- Kategorie-Navigation (hardcoded, buggy, bricht oft ab)
-- Brand-Feld (erscheint erst nach Kategorie)
+- Kategorie-Mapping Logic (findet beste Kategorie basierend auf AI-Analyse)
+- Brand-Feld (würde erscheinen NACH erfolgreicher Kategorie-Auswahl)
 
-### ❌ Was noch fehlt
-1. **PRIO 1:** Robuste Kategorie-Auswahl (219 Kategorien, bis zu 5 Ebenen)
+### ❌ Was noch fehlt (nach Kategorie-Fix)
+1. **PRIO 1:** 🔥 Kategorie-Navigation mit Playwright neu implementieren
 2. **PRIO 2:** Foto-Upload zu Vinted
 3. **PRIO 3:** Alle Felder (Brand, Größe, Farbe, Zustand, Preis)
 4. **PRIO 4:** Submit-Button aktivieren (aktuell absichtlich disabled)
