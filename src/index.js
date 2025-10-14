@@ -7,6 +7,7 @@ const healthController = require('./controllers/health');
 const loginController = require('./controllers/login');
 const categoryTestController = require('./controllers/categoryTest');
 const debugVintedController = require('./controllers/debugVinted');
+const debugPhotoUploadController = require('./controllers/debugPhotoUpload');
 const vintedController = require('./controllers/vinted');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,6 +37,7 @@ app.post('/test/category', categoryTestController.testCategorySelection);
 app.get('/test/categories', categoryTestController.listCategories);
 app.get('/debug/upload-form', debugVintedController.inspectUploadForm.bind(debugVintedController));
 app.post('/debug/category-click', debugVintedController.testCategoryClick.bind(debugVintedController));
+app.post('/debug/photo-upload', debugPhotoUploadController.analyzeUploadPage.bind(debugPhotoUploadController));
 
 app.get('/', (req, res) => {
   res.json({
