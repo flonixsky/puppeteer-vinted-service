@@ -31,13 +31,32 @@ class DebugVintedController {
       await page.goto('https://www.vinted.de/items/new', { waitUntil: 'networkidle2', timeout: 30000 });
       await new Promise(resolve => setTimeout(resolve, 3000));
       
-      // Analyze form structure
+      // Analyze form structure - suche ALLE Forms, nicht nur das erste!
       const formAnalysis = await page.evaluate(() => {
-        const form = document.querySelector('form');
-        if (!form) return { error: 'No form found' };
+        const allForms = document.querySelectorAll('form');
+        
+        // Find form with "Wähle eine Kategorie" or category field
+        let uploadForm = null;
+        for (const form of allForms) {
+          const text = form.textContent;
+          if (text.includes('Wähle eine Kategorie') || 
+              text.includes('Kategorie') ||
+              text.includes('Titel') ||
+              text.includes('Beschreibung')) {
+            uploadForm = form;
+            break;
+          }
+        }
+        
+        if (!uploadForm) {
+          return { 
+            error: 'Upload form not found',
+            allFormsCount: allForms.length
+          };
+        }
         
         // Get all inputs
-        const inputs = Array.from(form.querySelectorAll('input, select, textarea, [role="combobox"]'));
+        const inputs = Array.from(uploadForm.querySelectorAll('input, select, textarea, [role="combobox"]'));
         const inputInfo = inputs.map(input => ({
           tag: input.tagName,
           type: input.type || '',
@@ -50,20 +69,27 @@ class DebugVintedController {
           role: input.getAttribute('role') || ''
         }));
         
-        // Get all buttons
-        const buttons = Array.from(form.querySelectorAll('button, [role="button"]'));
+        // Get all buttons and button-like elements
+        const buttons = Array.from(uploadForm.querySelectorAll('button, [role="button"], div[class*="button"]'));
         const buttonInfo = buttons.map(btn => ({
-          text: btn.textContent.trim(),
+          text: btn.textContent.trim().substring(0, 100), // Max 100 chars
           className: btn.className || '',
           id: btn.id || '',
           type: btn.type || '',
           role: btn.getAttribute('role') || ''
-        }));
+        })).filter(b => b.text.length > 0); // Filter empty buttons
+        
+        // Get all text content that might be clickable for category
+        const allText = Array.from(uploadForm.querySelectorAll('*'))
+          .map(el => el.textContent.trim())
+          .filter(t => t.includes('Kategorie') || t.includes('Wähle'))
+          .slice(0, 10);
         
         return {
           inputs: inputInfo,
           buttons: buttonInfo,
-          formHTML: form.innerHTML.substring(0, 5000) // First 5000 chars
+          categoryTexts: allText,
+          formHTML: uploadForm.innerHTML.substring(0, 10000) // More chars
         };
       });
       
