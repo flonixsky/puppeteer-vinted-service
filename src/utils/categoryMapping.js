@@ -19,62 +19,111 @@ function findBestCategory(aiCategory, aiGender = null) {
     'male': 'herren'
   };
   
-  const targetGender = aiGender ? genderMap[aiGender.toLowerCase()] : null;
+  // Default zu Damen wenn kein Gender angegeben
+  const targetGender = aiGender ? genderMap[aiGender.toLowerCase()] : 'damen';
 
-  // Mapping: AI-Begriffe → Vinted-Kategorien
+  // Mapping: AI-Begriffe → Vinted-Kategorien (exakte Priorität)
   const categoryKeywords = {
-    't-shirt': ['t-shirts', 'tops & t-shirts'],
-    'shirt': ['t-shirts', 'tops & t-shirts'],
-    'blouse': ['blusen'],
-    'top': ['tops & t-shirts'],
-    'sweater': ['pullover', 'sweater'],
-    'hoodie': ['hoodies', 'pullis & hoodies'],
-    'pullover': ['pullover'],
-    'jacket': ['jacken'],
-    'coat': ['mäntel'],
-    'blazer': ['blazer'],
-    'jeans': ['jeans'],
-    'pants': ['hosen'],
-    'trousers': ['hosen'],
-    'leggings': ['leggings'],
-    'shorts': ['shorts'],
-    'dress': ['kleider'],
-    'skirt': ['röcke']
+    't-shirt': 't-shirts',
+    'shirt': 'shirts',
+    'blouse': 'blusen',
+    'top': 'tops',
+    'sweater': 'sweater',
+    'hoodie': 'hoodies',
+    'pullover': 'pullover',
+    'jacket': 'jacken',
+    'coat': 'mäntel',
+    'blazer': 'blazer',
+    'jeans': 'jeans',
+    'pants': 'hosen',
+    'trousers': 'hosen',
+    'leggings': 'leggings',
+    'shorts': 'shorts',
+    'dress': 'kleider',
+    'skirt': 'röcke'
   };
 
-  let keywords = [];
-  for (const [key, values] of Object.entries(categoryKeywords)) {
-    if (normalized.includes(key)) {
-      keywords = values;
-      break;
-    }
-  }
-
+  // Finde passende Kategorien
   const candidates = VINTED_CATEGORIES.categories.filter(cat => {
-    if (targetGender && cat.hauptkategorie.toLowerCase() !== targetGender) {
+    // Filtere nach Gender
+    if (cat.hauptkategorie.toLowerCase() !== targetGender) {
       return false;
     }
     
-    if (keywords.length > 0) {
-      const fullPathLower = cat.full_path.toLowerCase();
-      return keywords.some(kw => fullPathLower.includes(kw));
+    // Suche nach Keyword-Match
+    const fullPathLower = cat.full_path.toLowerCase();
+    for (const [keyword, vintedTerm] of Object.entries(categoryKeywords)) {
+      if (normalized.includes(keyword)) {
+        return fullPathLower.includes(vintedTerm);
+      }
     }
     
     return false;
   });
 
-  if (candidates.length > 0) {
-    candidates.sort((a, b) => b.depth - a.depth);
-    console.log(`✅ Kategorie gefunden: ${candidates[0].full_path}`);
-    return candidates[0];
+  if (candidates.length === 0) {
+    console.warn(`⚠️ Keine passende Kategorie für "${aiCategory}" (${targetGender})`);
+    const fallback = VINTED_CATEGORIES.categories.find(
+      cat => cat.full_path === "Damen → Kleidung → Sonstiges"
+    );
+    return fallback || VINTED_CATEGORIES.categories[0];
   }
 
-  const fallback = VINTED_CATEGORIES.categories.find(
-    cat => cat.full_path === "Damen → Kleidung → Sonstiges"
-  );
+  // Scoring-System für beste Kategorie
+  const scored = candidates.map(cat => {
+    let score = 0;
+    const pathLower = cat.full_path.toLowerCase();
+    const parts = cat.parts.map(p => p.toLowerCase());
+    
+    // +100 für exakte Übereinstimmung im letzten Teil
+    if (parts[parts.length - 1] === normalized) {
+      score += 100;
+    }
+    
+    // +50 für exakte Übereinstimmung in irgendeinem Teil
+    if (parts.some(p => p === normalized)) {
+      score += 50;
+    }
+    
+    // +30 für Keyword-Match im letzten Teil
+    for (const [keyword, vintedTerm] of Object.entries(categoryKeywords)) {
+      if (normalized.includes(keyword)) {
+        const lastPart = parts[parts.length - 1];
+        if (lastPart === vintedTerm) {
+          score += 30;
+        }
+      }
+    }
+    
+    // +10 für niedrigere Depth (spezifischer ist besser, aber nicht zu tief)
+    // Optimal: depth 3-4
+    if (cat.depth === 3 || cat.depth === 4) {
+      score += 10;
+    }
+    
+    // -5 für zu tiefe Hierarchie (zu spezifisch)
+    if (cat.depth > 4) {
+      score -= 5;
+    }
+    
+    return { cat, score };
+  });
   
-  console.warn(`⚠️ Keine passende Kategorie für "${aiCategory}"`);
-  return fallback || VINTED_CATEGORIES.categories[0];
+  // Sortiere nach Score (höchster zuerst)
+  scored.sort((a, b) => b.score - a.score);
+  
+  const best = scored[0].cat;
+  console.log(`✅ Kategorie gefunden: ${best.full_path} (Score: ${scored[0].score}, Depth: ${best.depth})`);
+  
+  // Debug: Zeige Top 3
+  if (scored.length > 1) {
+    console.log(`   Alternative Kategorien:`);
+    scored.slice(1, 3).forEach((s, i) => {
+      console.log(`   ${i + 2}. ${s.cat.full_path} (Score: ${s.score})`);
+    });
+  }
+  
+  return best;
 }
 
 /**
@@ -86,7 +135,7 @@ async function clickWithRetry(page, elementText, maxRetries = 3) {
       console.log(`    Versuch ${attempt}/${maxRetries} für "${elementText}"`);
       
       // Warte kurz auf DOM-Update
-      await page.waitForTimeout(300);
+      await new Promise(resolve => setTimeout(resolve, 300));
       
       // Strategy 1: Suche innerhalb des Formulars (am wichtigsten!)
       const clickedInForm = await page.evaluate((text) => {
@@ -117,7 +166,7 @@ async function clickWithRetry(page, elementText, maxRetries = 3) {
       
       if (clickedInForm) {
         console.log(`    ✓ Gefunden im Formular`);
-        await page.waitForTimeout(500);
+        await new Promise(resolve => setTimeout(resolve, 500));
         return true;
       }
       
@@ -144,7 +193,7 @@ async function clickWithRetry(page, elementText, maxRetries = 3) {
             if (isVisible) {
               console.log(`    ✓ Gefunden mit XPath`);
               await element.click();
-              await page.waitForTimeout(500);
+              await new Promise(resolve => setTimeout(resolve, 500));
               return true;
             }
           }
@@ -187,14 +236,14 @@ async function clickWithRetry(page, elementText, maxRetries = 3) {
       
       if (clickedGlobal) {
         console.log(`    ✓ Gefunden (global)`);
-        await page.waitForTimeout(500);
+        await new Promise(resolve => setTimeout(resolve, 500));
         return true;
       }
       
       // Kein Selector hat funktioniert, warte und retry
       if (attempt < maxRetries) {
         console.log(`    ⏳ Element nicht gefunden, warte ${attempt * 500}ms...`);
-        await page.waitForTimeout(attempt * 500);
+        await new Promise(resolve => setTimeout(resolve, attempt * 500));
       }
       
     } catch (error) {
@@ -232,7 +281,7 @@ async function navigateToCategory(page, category) {
       }
       
       console.log(`    ✅ ${mainCat} ausgewählt`);
-      await page.waitForTimeout(800);
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
 
     // Unterkategorien
@@ -256,7 +305,7 @@ async function navigateToCategory(page, category) {
         console.log(`    ✅ ${subCat} ausgewählt`);
       }
       
-      await page.waitForTimeout(600);
+      await new Promise(resolve => setTimeout(resolve, 600));
     }
 
     // Warte auf Brand-API (signalisiert dass Kategorie-Felder geladen sind)
@@ -277,7 +326,7 @@ async function navigateToCategory(page, category) {
     }
 
     // Zusätzlich: Warte auf DOM-Änderungen
-    await page.waitForTimeout(1500);
+    await new Promise(resolve => setTimeout(resolve, 1500));
     
     // Verify: Prüfe ob Brand-Feld erschienen ist
     const brandFieldExists = await page.$('input[name="brand"], input[id="brand"]');
