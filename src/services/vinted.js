@@ -659,13 +659,14 @@ class VintedService {
         logger.warn('Could not find "Fotos hinzufügen" button, trying to find file input directly');
       }
       
-      // NOW find file input element - try multiple selectors
+      // NOW find file input element
+      // SOLUTION from StackOverflow: File input is INSIDE div#photos!
       const fileInputSelectors = [
+        '#photos input',  // StackOverflow solution!
+        '#photos input[type="file"]',
+        'div[id="photos"] input',
         'input[type="file"]',
-        'input[accept*="image"]',
-        'input[name="photo"]',
-        '[data-testid="photo-upload-input"]',
-        '#photo-input'
+        'input[accept*="image"]'
       ];
       
       let fileInput = null;
