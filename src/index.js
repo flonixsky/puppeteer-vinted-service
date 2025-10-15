@@ -8,6 +8,7 @@ const loginController = require('./controllers/login');
 const categoryTestController = require('./controllers/categoryTest');
 const debugVintedController = require('./controllers/debugVinted');
 const debugPhotoUploadController = require('./controllers/debugPhotoUpload');
+const debugArticleController = require('./controllers/debugArticle');
 const vintedController = require('./controllers/vinted');
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,6 +39,7 @@ app.get('/test/categories', categoryTestController.listCategories);
 app.get('/debug/upload-form', debugVintedController.inspectUploadForm.bind(debugVintedController));
 app.post('/debug/category-click', debugVintedController.testCategoryClick.bind(debugVintedController));
 app.post('/debug/photo-upload', debugPhotoUploadController.analyzeUploadPage.bind(debugPhotoUploadController));
+app.get('/debug/article/:articleId', debugArticleController.getArticleData.bind(debugArticleController));
 
 app.get('/', (req, res) => {
   res.json({
