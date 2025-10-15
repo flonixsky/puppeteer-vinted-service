@@ -636,10 +636,44 @@ class VintedService {
     try {
       logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
       
-      // Find file input FIRST (it's already on the page, just hidden)
-      // Based on user info: clicking "+ Fotos hinzufügen" opens Windows Explorer
-      // This means the file input is already there, we just need to target it
+      // STEP 1: Click "+ Fotos hinzufügen" button to trigger file input
+      // According to user: clicking this button opens Windows Explorer
+      logger.info('Looking for "+ Fotos hinzufügen" button...');
       
+      const photoButtonSelectors = [
+        'button:has-text("Fotos hinzufügen")',
+        'button:has-text("+ Fotos")',
+        '[data-testid*="photo"]',
+        '[data-testid*="upload"]',
+        'label[for*="photo"]',  // Sometimes it's a label acting as button
+        'button:has-text("Foto")'
+      ];
+      
+      let buttonClicked = false;
+      for (const selector of photoButtonSelectors) {
+        try {
+          const button = page.locator(selector).first();
+          await button.waitFor({ state: 'visible', timeout: 3000 });
+          logger.info(`Found photo button with selector: ${selector}`);
+          // ACTUALLY CLICK THE BUTTON!
+          await button.click();
+          logger.info(`✓ Clicked photo button with selector: ${selector}`);
+          buttonClicked = true;
+          // Wait for file input to appear after click
+          await playwrightService.randomDelay(500, 1000);
+          break;
+        } catch (e) {
+          logger.debug(`Button not found or not clickable with selector: ${selector}`);
+          continue;
+        }
+      }
+      
+      if (!buttonClicked) {
+        logger.warn('Could not find/click "+ Fotos hinzufügen" button - trying to find file input directly');
+      }
+      
+      // STEP 2: Find file input element
+      // After clicking button OR if it's already on the page
       logger.info('Looking for file input element...');
       
       const fileInputSelectors = [
@@ -647,7 +681,8 @@ class VintedService {
         'input[type="file"]',                    // Generic file input
         '#photos input[type="file"]',            // Inside photos container
         '[id*="photo"] input[type="file"]',      // Any photo-related container
-        '[class*="photo" i] input[type="file"]'  // Class-based
+        '[class*="photo" i] input[type="file"]', // Class-based
+        'input[accept*="image"]'                 // By accept attribute only
       ];
       
       let fileInput = null;
@@ -662,12 +697,18 @@ class VintedService {
             fileInput = page.locator(selector).first();
             foundSelector = selector;
             
-            // Check if it's the right input by checking accept attribute
-            const acceptAttr = await fileInput.getAttribute('accept');
-            logger.info(`Found file input with accept: ${acceptAttr}`);
-            
-            if (acceptAttr && acceptAttr.includes('image')) {
-              logger.info(`✓ Using file input with selector: ${selector}`);
+            // Check if it's the right input
+            try {
+              const acceptAttr = await fileInput.getAttribute('accept');
+              logger.info(`Found file input with accept: ${acceptAttr}`);
+              
+              if (acceptAttr && acceptAttr.includes('image')) {
+                logger.info(`✓ Using file input with selector: ${selector}`);
+                break;
+              }
+            } catch (e) {
+              // If we can't get accept attribute, still try to use it
+              logger.info(`✓ Using file input with selector: ${selector} (accept attr check failed)`);
               break;
             }
           }
@@ -679,6 +720,11 @@ class VintedService {
       
       if (!fileInput) {
         logger.error('Could not find file input element');
+        
+        // Take a screenshot for debugging
+        const debugScreenshot = await playwrightService.takeScreenshot(page);
+        logger.error('Screenshot taken for debugging file input issue');
+        
         return { success: false, error: 'Could not find file input element' };
       }
       
