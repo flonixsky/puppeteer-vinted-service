@@ -230,7 +230,7 @@ class VintedService {
 
       logger.info('Starting article upload...');
 
-      // Prepare image URLs (will upload AFTER filling all other fields)
+      // STEP 1: PHOTO UPLOAD FIRST (as it's the first field on Vinted's form)
       let imageUrls = [];
       
       if (article.image_urls && Array.isArray(article.image_urls) && article.image_urls.length > 0) {
@@ -244,9 +244,24 @@ class VintedService {
       if (imageUrls.length === 0) {
         logger.warn('No image URLs found - article will be published without photos');
       } else {
-        logger.info('Image URLs prepared, will try to upload AFTER filling all fields', { count: imageUrls.length });
+        logger.info('Uploading photos FIRST (first field in Vinted form)', { count: imageUrls.length });
+        
+        try {
+          const uploadResult = await this.uploadPhotos(page, imageUrls);
+          
+          if (uploadResult.success) {
+            logger.info('✓ Photos uploaded successfully', { count: uploadResult.uploadedCount });
+          } else {
+            logger.warn('Photo upload failed', { error: uploadResult.error });
+          }
+        } catch (error) {
+          logger.warn('Photo upload threw error', { error: error.message });
+        }
+        
+        await playwrightService.randomDelay(2000, 3000);
       }
 
+      // STEP 2: Now fill text fields
       // VALIDATION: Ensure minimum 5 characters for title and description
       const title = article.title || '';
       const description = article.description || '';
@@ -457,28 +472,9 @@ class VintedService {
         await playwrightService.randomDelay(500, 1000);
       }
 
-      // PHOTO UPLOAD - Try at the END after all fields are filled
-      if (imageUrls.length > 0) {
-        logger.info('Now attempting photo upload after filling all fields...', { count: imageUrls.length });
-        
-        try {
-          const uploadResult = await this.uploadPhotos(page, imageUrls);
-          
-          if (uploadResult.success) {
-            logger.info('Photos uploaded successfully', { count: uploadResult.uploadedCount });
-          } else {
-            logger.warn('Photo upload failed but continuing', { error: uploadResult.error });
-          }
-        } catch (error) {
-          logger.warn('Photo upload threw error but continuing', { error: error.message });
-        }
-        
-        await playwrightService.randomDelay(2000, 3000);
-      }
-
       // const screenshotFilled = await playwrightService.takeScreenshot(page);
 
-      logger.info('Article filled including photos, submitting now...');
+      logger.info('All fields filled, submitting now...');
 
       // Find and click submit button
       const submitButtonSelectors = [
