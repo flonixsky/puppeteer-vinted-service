@@ -122,9 +122,41 @@ class FormFieldSelector {
       // Try multiple strategies to find the field button WITHIN the form
       const strategies = [
         {
-          name: 'Direct input by ID (highest priority)',
+          name: 'Direct data-testid (HIGHEST PRIORITY - from analysis)',
           action: async () => {
-            // Direct selectors for Vinted's input fields
+            // These are the EXACT selectors from page analysis
+            const fieldSelectors = {
+              'category': '[data-testid="catalog-select-dropdown-input"]',
+              'brand': '[data-testid="brand-input"]',
+              'size': '[data-testid="size-input"]',
+              'condition': '[data-testid="status-input"]',
+              'color': '[data-testid="color-input"]'
+            };
+            
+            const selector = fieldSelectors[fieldType];
+            if (selector) {
+              try {
+                const input = page.locator(selector).first();
+                await input.waitFor({ state: 'visible', timeout: 3000 });
+                
+                // Verify it's readonly (confirms it opens a modal, not a real input)
+                const isReadonly = await input.getAttribute('readonly');
+                logger.info(`Found ${fieldType} input by data-testid: ${selector} (readonly: ${isReadonly !== null})`);
+                
+                await input.click();
+                return true;
+              } catch (e) {
+                logger.debug(`data-testid selector failed: ${e.message}`);
+                return false;
+              }
+            }
+            return false;
+          }
+        },
+        {
+          name: 'Direct input by ID',
+          action: async () => {
+            // Fallback: Direct ID selectors
             const fieldSelectors = {
               'category': 'input#category',
               'brand': 'input#brand',
