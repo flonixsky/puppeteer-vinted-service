@@ -16,8 +16,13 @@ class PlaywrightService {
     try {
       logger.info('Launching Playwright browser...');
 
+      // Set headless to false for debugging (can see what's happening)
+      // Change to true for production
+      const isHeadless = process.env.PUPPETEER_HEADLESS === 'true';
+      logger.info(`Browser mode: ${isHeadless ? 'HEADLESS' : 'VISIBLE (headed)'}`);
+
       this.browser = await chromium.launch({
-        headless: process.env.PUPPETEER_HEADLESS === 'true',
+        headless: false, // VISIBLE for debugging - set to true for production
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
