@@ -474,16 +474,29 @@ class VintedService {
       ];
 
       let submitSuccess = false;
+      let foundButDisabled = [];
       
       // Try different selectors
       for (const selector of submitButtonSelectors) {
         try {
+          const submitButtons = await page.locator(selector).all();
+          logger.info(`Checking selector "${selector}" - found ${submitButtons.length} button(s)`);
+          
+          if (submitButtons.length === 0) {
+            continue;
+          }
+          
           const submitButton = page.locator(selector).first();
           await submitButton.waitFor({ state: 'visible', timeout: 3000 });
           
           // Check if button is enabled
           const isDisabled = await submitButton.getAttribute('disabled');
-          if (isDisabled) {
+          const buttonText = await submitButton.textContent();
+          
+          logger.info(`Button found: "${buttonText}" - Disabled: ${isDisabled !== null}`);
+          
+          if (isDisabled !== null) {
+            foundButDisabled.push({ selector, text: buttonText });
             logger.warn(`Submit button found but disabled: ${selector}`);
             continue;
           }
@@ -493,13 +506,17 @@ class VintedService {
           submitSuccess = true;
           break;
         } catch (e) {
-          logger.debug(`Submit button not found with selector: ${selector}`);
+          logger.debug(`Submit button not found or error with selector "${selector}": ${e.message}`);
           continue;
         }
       }
 
       if (!submitSuccess) {
-        throw new Error('Could not find or click submit button');
+        if (foundButDisabled.length > 0) {
+          logger.error('Submit button(s) found but all disabled', { foundButDisabled });
+          throw new Error('Submit button is disabled - likely missing required fields (photos?)');
+        }
+        throw new Error('Could not find submit button on page');
       }
 
       await playwrightService.randomDelay(2000, 3000);
