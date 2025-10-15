@@ -305,7 +305,24 @@ class VintedService {
         
         logger.info('Category selected successfully');
         
-        await playwrightService.randomDelay(1000, 2000);
+        // DEBUG: Log URL and check form elements after category selection
+        const urlAfterCategory = page.url();
+        logger.info('URL after category selection', { url: urlAfterCategory });
+        
+        // Wait longer for form to stabilize after category selection
+        await playwrightService.randomDelay(3000, 4000);
+        
+        // Check how many form elements are visible now
+        const titleInputs = await page.locator('input[id="title"], input[name="title"]').count();
+        const brandInputs = await page.locator('input[id="brand"], input[name="brand"]').count();
+        const photoInputs = await page.locator('#photos input').count();
+        const submitButtons = await page.locator('button[type="submit"]').count();
+        logger.info('Form elements after category selection', { 
+          titleInputs, 
+          brandInputs,
+          photoInputs,
+          submitButtons 
+        });
       }
 
       if (article.brand) {
