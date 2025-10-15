@@ -122,6 +122,34 @@ class FormFieldSelector {
       // Try multiple strategies to find the field button WITHIN the form
       const strategies = [
         {
+          name: 'Direct input by ID (highest priority)',
+          action: async () => {
+            // Direct selectors for Vinted's input fields
+            const fieldSelectors = {
+              'category': 'input#category',
+              'brand': 'input#brand',
+              'size': 'input#size',
+              'condition': 'input#status', // Vinted uses "status" for condition
+              'color': 'input#color'
+            };
+            
+            const selector = fieldSelectors[fieldType];
+            if (selector) {
+              try {
+                const input = page.locator(selector).first();
+                await input.waitFor({ state: 'visible', timeout: 3000 });
+                logger.info(`Found ${fieldType} input by ID: ${selector}`);
+                await input.click();
+                return true;
+              } catch (e) {
+                logger.debug(`Direct input selector failed: ${e.message}`);
+                return false;
+              }
+            }
+            return false;
+          }
+        },
+        {
           name: 'Form-scoped button by text',
           action: async () => {
             for (const text of patterns.textMatches) {
@@ -356,6 +384,13 @@ class FormFieldSelector {
                 
                 const text = await element.textContent();
                 if (text && text.trim() === categoryName) {
+                  // CRITICAL: Check if it's a navigation link!
+                  const href = await element.getAttribute('href');
+                  if (href && href.includes('/catalog')) {
+                    logger.debug('Skipping data-testid element - this is a navigation link');
+                    continue;
+                  }
+                  
                   const testId = await element.getAttribute('data-testid');
                   logger.info(`Found via data-testid: ${testId}`);
                   await element.click();
