@@ -140,19 +140,34 @@ class DebugPhotoUploadController {
         return results;
       });
       
-      const screenshot = await playwrightService.takeScreenshot(page);
+      // Only take screenshot if explicitly requested via query parameter
+      const includeScreenshot = req.query.screenshot === 'true';
+      let screenshot = null;
+      
+      if (includeScreenshot) {
+        logger.info('Taking screenshot (requested via query parameter)');
+        screenshot = await playwrightService.takeScreenshot(page);
+      } else {
+        logger.info('Skipping screenshot (not requested)');
+      }
       
       await playwrightService.closeBrowser();
       
       const duration = Date.now() - startTime;
       
-      res.status(200).json({
+      const response = {
         success: true,
         analysis,
-        screenshot,
         duration,
         message: 'Page analyzed after filling all fields'
-      });
+      };
+      
+      // Only include screenshot if it was taken
+      if (screenshot) {
+        response.screenshot = screenshot;
+      }
+      
+      res.status(200).json(response);
       
     } catch (error) {
       logger.error('Debug analysis failed', { error: error.message });
