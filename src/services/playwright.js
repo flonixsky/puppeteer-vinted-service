@@ -16,13 +16,13 @@ class PlaywrightService {
     try {
       logger.info('Launching Playwright browser...');
 
-      // Set headless to false for debugging (can see what's happening)
-      // Change to true for production
-      const isHeadless = process.env.PUPPETEER_HEADLESS === 'true';
-      logger.info(`Browser mode: ${isHeadless ? 'HEADLESS' : 'VISIBLE (headed)'}`);
+      // Docker containers don't have a display, so must run headless
+      // To see browser action, test locally on Windows with visible browser
+      const isHeadless = process.env.PUPPETEER_HEADLESS !== 'false'; // Default to true
+      logger.info(`Browser mode: ${isHeadless ? 'HEADLESS (Docker)' : 'VISIBLE (Local)'}`);
 
       this.browser = await chromium.launch({
-        headless: false, // VISIBLE for debugging - set to true for production
+        headless: isHeadless, // true for Docker, false for local testing
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

@@ -1,5 +1,5 @@
 const playwrightService = require('./playwright');
-const categorySelector = require('./categorySelector');
+const formFieldSelector = require('./formFieldSelector');
 const logger = require('../utils/logger');
 
 class VintedService {
@@ -297,7 +297,7 @@ class VintedService {
         await playwrightService.randomDelay(500, 1000);
       }
 
-      // Kategorie-Auswahl - using improved Playwright locators
+      // Kategorie-Auswahl - using NEW formFieldSelector (form-scoped, avoids navigation!)
       if (article.category || article.ai_analysis?.category) {
         logger.info('Selecting category...');
         const { findBestCategory } = require('../utils/categoryMapping');
@@ -311,162 +311,105 @@ class VintedService {
           depth: vintedCategory.depth 
         });
         
-        // NEW: Use dedicated CategorySelector service with multiple fallback strategies
-        const categoryResult = await categorySelector.selectCategory(page, vintedCategory);
+        // NEW: Use formFieldSelector - scoped to form context, avoids clicking navigation links!
+        const pathParts = vintedCategory.full_path.split(' → ');
+        const categoryResult = await formFieldSelector.selectField(page, 'category', pathParts);
         
         if (!categoryResult.success) {
-          throw new Error(`Failed to navigate to category: ${categoryResult.error}`);
+          throw new Error(`Failed to select category: ${categoryResult.error}`);
         }
         
-        logger.info('Category selected successfully');
+        logger.info('✓ Category selected successfully (stayed on /items/new)');
         
-        // DEBUG: Log URL and check form elements after category selection
+        // Verify URL - should still be on /items/new
         const urlAfterCategory = page.url();
         logger.info('URL after category selection', { url: urlAfterCategory });
         
-        // Wait longer for form to stabilize after category selection
-        await playwrightService.randomDelay(3000, 4000);
+        if (!urlAfterCategory.includes('/items/new')) {
+          throw new Error(`Category selection navigated away! URL: ${urlAfterCategory}`);
+        }
+        
+        // Wait for form to update with category-specific fields
+        await playwrightService.randomDelay(2000, 3000);
         
         // Check how many form elements are visible now
-        const titleInputs = await page.locator('input[id="title"], input[name="title"]').count();
         const brandInputs = await page.locator('input[id="brand"], input[name="brand"]').count();
-        const photoInputs = await page.locator('#photos input').count();
-        const submitButtons = await page.locator('button[type="submit"]').count();
-        logger.info('Form elements after category selection', { 
-          titleInputs, 
-          brandInputs,
-          photoInputs,
-          submitButtons 
-        });
+        logger.info('Form elements after category (Brand fields visible)', { brandInputs });
       }
 
-      if (article.brand) {
-        logger.info('Setting brand...');
-        const brandSelector = 'input[id="brand"], input[name="brand"]';
-        await playwrightService.humanType(page, brandSelector, article.brand);
+      // BRAND field - using formFieldSelector (custom UI like category)
+      if (article.brand || article.ai_analysis?.brand) {
+        const brand = article.brand || article.ai_analysis?.brand;
+        logger.info('Setting brand...', { brand });
+        
+        const brandResult = await formFieldSelector.selectField(page, 'brand', brand);
+        
+        if (brandResult.success) {
+          logger.info('✓ Brand selected successfully');
+        } else {
+          logger.warn('Could not set brand field', { error: brandResult.error });
+        }
+        
         await playwrightService.randomDelay(500, 1000);
       }
 
-      // SIZE field (required)
+      // SIZE field - using formFieldSelector (custom UI like category)
       if (article.size || article.ai_analysis?.size) {
         const size = article.size || article.ai_analysis?.size;
         logger.info('Setting size...', { size });
         
-        // Try multiple selectors for size field
-        const sizeSelectors = [
-          'select[id="size"], select[name="size"]',
-          'input[id="size"], input[name="size"]',
-          '[data-testid="size-select"]'
-        ];
+        const sizeResult = await formFieldSelector.selectField(page, 'size', size);
         
-        let sizeSet = false;
-        for (const selector of sizeSelectors) {
-          try {
-            const element = page.locator(selector).first();
-            await element.waitFor({ state: 'visible', timeout: 3000 });
-            
-            // Check if it's a select or input
-            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
-            if (tagName === 'select') {
-              await element.selectOption({ label: size });
-            } else {
-              await playwrightService.humanType(page, selector, size);
-            }
-            sizeSet = true;
-            logger.info('Size set successfully');
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-        
-        if (!sizeSet) {
-          logger.warn('Could not set size field - may be optional or category-specific');
+        if (sizeResult.success) {
+          logger.info('✓ Size selected successfully');
+        } else {
+          logger.warn('Could not set size field', { error: sizeResult.error });
         }
         
         await playwrightService.randomDelay(500, 1000);
       }
 
-      // CONDITION field (required)
+      // CONDITION field - using formFieldSelector (custom UI like category)
       if (article.condition || article.ai_analysis?.condition) {
-        const condition = article.condition || article.ai_analysis?.condition;
+        let condition = article.condition || article.ai_analysis?.condition;
         logger.info('Setting condition...', { condition });
         
-        const conditionSelectors = [
-          'select[id="status"], select[name="status"]',
-          'select[id="condition"], select[name="condition"]',
-          '[data-testid="condition-select"]'
-        ];
+        // Map condition to Vinted German values
+        const conditionMap = {
+          'neu': 'Neu mit Etikett',
+          'sehr gut': 'Sehr gut',
+          'gut': 'Gut',
+          'zufriedenstellend': 'Zufriedenstellend',
+          'new': 'Neu mit Etikett',
+          'very good': 'Sehr gut',
+          'good': 'Gut',
+          'satisfactory': 'Zufriedenstellend'
+        };
         
-        let conditionSet = false;
-        for (const selector of conditionSelectors) {
-          try {
-            const element = page.locator(selector).first();
-            await element.waitFor({ state: 'visible', timeout: 3000 });
-            
-            // Map condition to Vinted values
-            const conditionMap = {
-              'neu': 'Neu mit Etikett',
-              'sehr gut': 'Sehr gut',
-              'gut': 'Gut',
-              'zufriedenstellend': 'Zufriedenstellend',
-              'new': 'Neu mit Etikett',
-              'very good': 'Sehr gut',
-              'good': 'Gut',
-              'satisfactory': 'Zufriedenstellend'
-            };
-            
-            const vintedCondition = conditionMap[condition.toLowerCase()] || condition;
-            await element.selectOption({ label: vintedCondition });
-            conditionSet = true;
-            logger.info('Condition set successfully', { vintedCondition });
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
+        const vintedCondition = conditionMap[condition.toLowerCase()] || condition;
         
-        if (!conditionSet) {
-          logger.warn('Could not set condition field');
+        const conditionResult = await formFieldSelector.selectField(page, 'condition', vintedCondition);
+        
+        if (conditionResult.success) {
+          logger.info('✓ Condition selected successfully', { vintedCondition });
+        } else {
+          logger.warn('Could not set condition field', { error: conditionResult.error });
         }
         
         await playwrightService.randomDelay(500, 1000);
       }
 
-      // COLOR field (required)
+      // COLOR field - using formFieldSelector (custom UI like category)
       if (article.color || article.ai_analysis?.color) {
         const color = article.color || article.ai_analysis?.color;
         logger.info('Setting color...', { color });
         
-        const colorSelectors = [
-          'select[id="color"], select[name="color"]',
-          'input[id="color"], input[name="color"]',
-          '[data-testid="color-select"]'
-        ];
+        const colorResult = await formFieldSelector.selectField(page, 'color', color);
         
-        let colorSet = false;
-        for (const selector of colorSelectors) {
-          try {
-            const element = page.locator(selector).first();
-            await element.waitFor({ state: 'visible', timeout: 3000 });
-            
-            const tagName = await element.evaluate(el => el.tagName.toLowerCase());
-            if (tagName === 'select') {
-              // Try to find matching color option
-              await element.selectOption({ label: color });
-            } else {
-              await playwrightService.humanType(page, selector, color);
-            }
-            colorSet = true;
-            logger.info('Color set successfully');
-            break;
-          } catch (e) {
-            continue;
-          }
-        }
-        
-        if (!colorSet) {
-          logger.warn('Could not set color field');
+        if (colorResult.success) {
+          logger.info('✓ Color selected successfully');
+        } else {
+          logger.warn('Could not set color field', { error: colorResult.error });
         }
         
         await playwrightService.randomDelay(500, 1000);
