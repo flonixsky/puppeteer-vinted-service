@@ -415,7 +415,7 @@ class FormFieldSelector {
         }
       },
       {
-        name: 'Exact text match',
+        name: 'Exact text match (NOT links)',
         action: async () => {
           const elements = await page.getByText(categoryName, { exact: true }).all();
           
@@ -424,18 +424,23 @@ class FormFieldSelector {
               const isVisible = await element.isVisible();
               if (!isVisible) continue;
               
-              // Make sure it's not a navigation link
+              // CRITICAL: Check tagName AND href - skip ALL <a> tags!
+              const tagName = await element.evaluate(el => el.tagName.toLowerCase());
               const href = await element.getAttribute('href');
-              if (href && href.includes('/catalog')) {
-                logger.debug('Skipping - this is a navigation link');
+              
+              logger.info(`Exact match candidate: tagName=${tagName}, href=${href}, text="${categoryName}"`);
+              
+              if (tagName === 'a' || href) {
+                logger.warn('SKIPPING - This is a link element (tagName=a or has href)');
                 continue;
               }
               
               await element.click();
-              logger.info(`Clicked element with exact text: ${categoryName}`);
+              logger.info(`✓ Clicked safe element with exact text: ${categoryName}`);
               await playwrightService.randomDelay(500, 800);
               return true;
             } catch (e) {
+              logger.debug(`Exact text match failed: ${e.message}`);
               continue;
             }
           }
