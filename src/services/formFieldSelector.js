@@ -365,17 +365,21 @@ class FormFieldSelector {
   async selectCategoryLevel(page, categoryName, level) {
     const strategies = [
       {
-        name: 'data-testid (Vinted-specific)',
+        name: 'Button/Div with data-testid (NOT links)',
         action: async () => {
-          // Try level-specific first
+          // CRITICAL: Only select buttons or divs, NEVER links!
           const testIdPatterns = [
-            `[data-testid^="first-category-"]`,
-            `[data-testid^="second-category-"]`,
-            `[data-testid*="category"]`
+            `button[data-testid^="first-category-"]`,
+            `div[data-testid^="first-category-"]`,
+            `button[data-testid^="second-category-"]`,
+            `div[data-testid^="second-category-"]`,
+            `button[data-testid*="category"]`,
+            `div[data-testid*="category"]`
           ];
           
           for (const pattern of testIdPatterns) {
             const elements = await page.locator(pattern).all();
+            logger.info(`Checking pattern: ${pattern} - found ${elements.length} elements`);
             
             for (const element of elements) {
               try {
@@ -384,20 +388,25 @@ class FormFieldSelector {
                 
                 const text = await element.textContent();
                 if (text && text.trim() === categoryName) {
-                  // CRITICAL: Check if it's a navigation link!
+                  // CRITICAL: Triple-check this is NOT a link!
+                  const tagName = await element.evaluate(el => el.tagName.toLowerCase());
                   const href = await element.getAttribute('href');
-                  if (href && href.includes('/catalog')) {
-                    logger.debug('Skipping data-testid element - this is a navigation link');
+                  
+                  logger.info(`Found match: tagName=${tagName}, href=${href}, text="${text.trim()}"`);
+                  
+                  if (tagName === 'a' || href) {
+                    logger.warn('SKIPPING - This is a link element!');
                     continue;
                   }
                   
                   const testId = await element.getAttribute('data-testid');
-                  logger.info(`Found via data-testid: ${testId}`);
+                  logger.info(`✓ Safe to click - button/div with data-testid: ${testId}`);
                   await element.click();
                   await playwrightService.randomDelay(500, 800);
                   return true;
                 }
               } catch (e) {
+                logger.debug(`Element check failed: ${e.message}`);
                 continue;
               }
             }
