@@ -415,7 +415,7 @@ class FormFieldSelector {
         }
       },
       {
-        name: 'Exact text match (NOT links)',
+        name: 'Exact text match (NOT links or children of links)',
         action: async () => {
           const elements = await page.getByText(categoryName, { exact: true }).all();
           
@@ -424,19 +424,33 @@ class FormFieldSelector {
               const isVisible = await element.isVisible();
               if (!isVisible) continue;
               
-              // CRITICAL: Check tagName AND href - skip ALL <a> tags!
+              // CRITICAL: Check if element OR ANY PARENT is a link!
+              const isInsideLink = await element.evaluate(el => {
+                // Check element itself
+                if (el.tagName.toLowerCase() === 'a' || el.hasAttribute('href')) {
+                  return true;
+                }
+                // Check all parents up the tree
+                let parent = el.parentElement;
+                while (parent) {
+                  if (parent.tagName.toLowerCase() === 'a' || parent.hasAttribute('href')) {
+                    return true;
+                  }
+                  parent = parent.parentElement;
+                }
+                return false;
+              });
+              
               const tagName = await element.evaluate(el => el.tagName.toLowerCase());
-              const href = await element.getAttribute('href');
+              logger.info(`Exact match candidate: tagName=${tagName}, isInsideLink=${isInsideLink}, text="${categoryName}"`);
               
-              logger.info(`Exact match candidate: tagName=${tagName}, href=${href}, text="${categoryName}"`);
-              
-              if (tagName === 'a' || href) {
-                logger.warn('SKIPPING - This is a link element (tagName=a or has href)');
+              if (isInsideLink) {
+                logger.warn('SKIPPING - Element is inside a link!');
                 continue;
               }
               
               await element.click();
-              logger.info(`✓ Clicked safe element with exact text: ${categoryName}`);
+              logger.info(`✓ Clicked safe element (NOT inside link): ${categoryName}`);
               await playwrightService.randomDelay(500, 800);
               return true;
             } catch (e) {
