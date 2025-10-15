@@ -365,6 +365,49 @@ class FormFieldSelector {
   async selectCategoryLevel(page, categoryName, level) {
     const strategies = [
       {
+        name: 'Button role with name (HIGHEST PRIORITY)',
+        action: async () => {
+          // Prioritize actual button elements with role="button"
+          const buttons = await page.getByRole('button', { name: categoryName, exact: true }).all();
+          
+          logger.info(`Looking for button[role="button"] with name="${categoryName}" - found ${buttons.length}`);
+          
+          for (const button of buttons) {
+            try {
+              const isVisible = await button.isVisible();
+              if (!isVisible) {
+                logger.debug('Button not visible, skipping');
+                continue;
+              }
+              
+              // Extra check: make sure it's not inside a link
+              const isInsideLink = await button.evaluate(el => {
+                let parent = el.parentElement;
+                while (parent) {
+                  if (parent.tagName.toLowerCase() === 'a') return true;
+                  parent = parent.parentElement;
+                }
+                return false;
+              });
+              
+              if (isInsideLink) {
+                logger.warn('Button is inside a link, skipping');
+                continue;
+              }
+              
+              logger.info(`✓ Found safe button with role="button" and name="${categoryName}"`);
+              await button.click();
+              await playwrightService.randomDelay(500, 800);
+              return true;
+            } catch (e) {
+              logger.debug(`Button check failed: ${e.message}`);
+              continue;
+            }
+          }
+          return false;
+        }
+      },
+      {
         name: 'Button/Div with data-testid (NOT links)',
         action: async () => {
           // CRITICAL: Only select buttons or divs, NEVER links!
