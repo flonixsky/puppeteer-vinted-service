@@ -657,15 +657,18 @@ class VintedService {
       logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
       
       // STEP 1: Click "+ Fotos hinzufügen" button to trigger file input
-      // According to user: clicking this button opens Windows Explorer
+      // Using precise selectors from browser inspection
       logger.info('Looking for "+ Fotos hinzufügen" button...');
       
       const photoButtonSelectors = [
-        'button:has-text("Fotos hinzufügen")',
+        '#photos .media-select__input-content > button',  // Most specific from browser
+        '.media-select__input-content > button',          // Backup
+        '#photos button.web_ui__Button__button',          // Alternative
+        'button:has-text("Fotos hinzufügen")',           // Fallback
         'button:has-text("+ Fotos")',
         '[data-testid*="photo"]',
         '[data-testid*="upload"]',
-        'label[for*="photo"]',  // Sometimes it's a label acting as button
+        'label[for*="photo"]',
         'button:has-text("Foto")'
       ];
       
@@ -693,13 +696,15 @@ class VintedService {
       }
       
       // STEP 2: Find file input element
-      // After clicking button OR if it's already on the page
+      // Using precise selectors from browser inspection
       logger.info('Looking for file input element...');
       
       const fileInputSelectors = [
-        'input[type="file"][accept*="image"]',  // Most specific
+        '#photos input.u-hidden',                // Most specific from browser (Vinted uses u-hidden class)
+        '#photos input[type="file"]',            // Alternative for #photos
+        'div#photos > input[type="file"]',       // Direct child
+        'input[type="file"][accept*="image"]',   // Generic with accept
         'input[type="file"]',                    // Generic file input
-        '#photos input[type="file"]',            // Inside photos container
         '[id*="photo"] input[type="file"]',      // Any photo-related container
         '[class*="photo" i] input[type="file"]', // Class-based
         'input[accept*="image"]'                 // By accept attribute only
