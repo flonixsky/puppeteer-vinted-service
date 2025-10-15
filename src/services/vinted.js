@@ -73,7 +73,7 @@ class VintedService {
 
       await playwrightService.randomDelay(2000, 3000);
 
-      const screenshotBefore = await playwrightService.takeScreenshot(page);
+      // const screenshotBefore = await playwrightService.takeScreenshot(page);
 
       logger.info('Filling login form...');
 
@@ -109,7 +109,7 @@ class VintedService {
 
       await playwrightService.randomDelay(3000, 5000);
 
-      const screenshotAfter = await playwrightService.takeScreenshot(page);
+      // const screenshotAfter = await playwrightService.takeScreenshot(page);
 
       const currentUrl = page.url();
       logger.info('Current URL after login', { url: currentUrl });
@@ -154,9 +154,10 @@ class VintedService {
       });
 
       let errorScreenshot = null;
-      if (page) {
-        errorScreenshot = await playwrightService.takeScreenshot(page);
-      }
+      // Screenshot disabled to save tokens
+      // if (page) {
+      //   errorScreenshot = await playwrightService.takeScreenshot(page);
+      // }
 
       await playwrightService.closeBrowser();
 
@@ -164,7 +165,7 @@ class VintedService {
         success: false,
         error: error.message,
         duration: Date.now() - startTime,
-        errorScreenshot: errorScreenshot
+        errorScreenshot: null
       };
     }
   }
@@ -202,9 +203,9 @@ class VintedService {
 
       await playwrightService.randomDelay(2000, 3000);
 
-      // Screenshot von Homepage mit Cookies
-      const screenshotHome = await playwrightService.takeScreenshot(page);
-      logger.info('Screenshot taken from homepage');
+      // Screenshot von Homepage mit Cookies - DISABLED to save tokens
+      // const screenshotHome = await playwrightService.takeScreenshot(page);
+      logger.info('Screenshot disabled - skipping homepage screenshot');
 
       // Check ob eingeloggt
       const isLoggedIn = await this.checkIfLoggedIn(page);
@@ -223,9 +224,9 @@ class VintedService {
 
       await playwrightService.randomDelay(2000, 3000);
 
-      // Screenshot von Upload-Seite
-      const screenshotUpload = await playwrightService.takeScreenshot(page);
-      logger.info('Screenshot taken from upload page');
+      // Screenshot von Upload-Seite - DISABLED to save tokens
+      // const screenshotUpload = await playwrightService.takeScreenshot(page);
+      logger.info('Screenshot disabled - skipping upload page screenshot');
 
       logger.info('Starting article upload...');
 
@@ -458,7 +459,7 @@ class VintedService {
         await playwrightService.randomDelay(2000, 3000);
       }
 
-      const screenshotFilled = await playwrightService.takeScreenshot(page);
+      // const screenshotFilled = await playwrightService.takeScreenshot(page);
 
       logger.info('Article filled including photos, submitting now...');
 
@@ -517,7 +518,8 @@ class VintedService {
       await playwrightService.randomDelay(2000, 3000);
 
       const finalUrl = page.url();
-      const screenshotAfterSubmit = await playwrightService.takeScreenshot(page);
+      // const screenshotAfterSubmit = await playwrightService.takeScreenshot(page);
+      const screenshotAfterSubmit = null; // Disabled to save tokens
       
       // Try to extract Vinted article ID from URL
       let vintedId = null;
@@ -560,9 +562,10 @@ class VintedService {
       });
 
       let errorScreenshot = null;
-      if (page) {
-        errorScreenshot = await playwrightService.takeScreenshot(page);
-      }
+      // Screenshot disabled to save tokens
+      // if (page) {
+      //   errorScreenshot = await playwrightService.takeScreenshot(page);
+      // }
 
       await playwrightService.closeBrowser();
 
@@ -721,9 +724,9 @@ class VintedService {
       if (!fileInput) {
         logger.error('Could not find file input element');
         
-        // Take a screenshot for debugging
-        const debugScreenshot = await playwrightService.takeScreenshot(page);
-        logger.error('Screenshot taken for debugging file input issue');
+        // Screenshot disabled to save tokens
+        // const debugScreenshot = await playwrightService.takeScreenshot(page);
+        logger.error('Screenshot disabled - file input not found');
         
         return { success: false, error: 'Could not find file input element' };
       }
