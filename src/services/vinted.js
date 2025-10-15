@@ -627,7 +627,8 @@ class VintedService {
   }
 
   async uploadPhotos(page, imageUrls) {
-    const fs = require('fs');
+    const fs = require('fs').promises;
+    const fsSync = require('fs');
     const path = require('path');
     const https = require('https');
     const http = require('http');
@@ -635,46 +636,18 @@ class VintedService {
     try {
       logger.info('Starting photo upload process...', { urlCount: imageUrls.length });
       
-      // FIRST: Click the "Fotos hinzufügen" button to make file input appear
-      logger.info('Looking for "Fotos hinzufügen" button...');
+      // Find file input FIRST (it's already on the page, just hidden)
+      // Based on user info: clicking "+ Fotos hinzufügen" opens Windows Explorer
+      // This means the file input is already there, we just need to target it
       
-      const photoButtonSelectors = [
-        'button:has-text("Fotos hinzufügen")',
-        'button:has-text("+ Fotos")',
-        'button:has-text("Foto")',
-        '[data-testid="photo-upload-button"]',
-        'button[class*="photo" i]',
-        'button[class*="upload" i]'
-      ];
+      logger.info('Looking for file input element...');
       
-      let buttonClicked = false;
-      for (const selector of photoButtonSelectors) {
-        try {
-          const button = page.locator(selector).first();
-          await button.waitFor({ state: 'visible', timeout: 3000 });
-          await button.click();
-          logger.info(`Clicked photo button: ${selector}`);
-          buttonClicked = true;
-          await playwrightService.randomDelay(1000, 2000);
-          break;
-        } catch (e) {
-          logger.debug(`Photo button not found with selector: ${selector}`);
-          continue;
-        }
-      }
-      
-      if (!buttonClicked) {
-        logger.warn('Could not find "Fotos hinzufügen" button, trying to find file input directly');
-      }
-      
-      // NOW find file input element
-      // SOLUTION from StackOverflow: File input is INSIDE div#photos!
       const fileInputSelectors = [
-        '#photos input',  // StackOverflow solution!
-        '#photos input[type="file"]',
-        'div[id="photos"] input',
-        'input[type="file"]',
-        'input[accept*="image"]'
+        'input[type="file"][accept*="image"]',  // Most specific
+        'input[type="file"]',                    // Generic file input
+        '#photos input[type="file"]',            // Inside photos container
+        '[id*="photo"] input[type="file"]',      // Any photo-related container
+        '[class*="photo" i] input[type="file"]'  // Class-based
       ];
       
       let fileInput = null;
@@ -683,20 +656,29 @@ class VintedService {
       for (const selector of fileInputSelectors) {
         try {
           const inputs = await page.locator(selector).all();
-          logger.info(`Found ${inputs.length} file inputs with selector: ${selector}`);
+          logger.info(`Checking selector: ${selector} - found ${inputs.length} inputs`);
           
           if (inputs.length > 0) {
             fileInput = page.locator(selector).first();
             foundSelector = selector;
-            logger.info(`Using file input with selector: ${selector}`);
-            break;
+            
+            // Check if it's the right input by checking accept attribute
+            const acceptAttr = await fileInput.getAttribute('accept');
+            logger.info(`Found file input with accept: ${acceptAttr}`);
+            
+            if (acceptAttr && acceptAttr.includes('image')) {
+              logger.info(`✓ Using file input with selector: ${selector}`);
+              break;
+            }
           }
         } catch (e) {
+          logger.debug(`Selector ${selector} failed: ${e.message}`);
           continue;
         }
       }
       
       if (!fileInput) {
+        logger.error('Could not find file input element');
         return { success: false, error: 'Could not find file input element' };
       }
       
@@ -704,84 +686,98 @@ class VintedService {
       const tempDir = '/tmp/vinted-uploads';
       
       // Create temp directory if it doesn't exist
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
+      if (!fsSync.existsSync(tempDir)) {
+        await fs.mkdir(tempDir, { recursive: true });
+        logger.info(`Created temp directory: ${tempDir}`);
       }
       
       // Download and upload each image
-      for (let i = 0; i < Math.min(imageUrls.length, 20); i++) { // Max 20 photos
+      for (let i = 0; i < Math.min(imageUrls.length, 20); i++) { // Max 20 photos per Vinted limits
         const imageUrl = imageUrls[i];
         logger.info(`Processing image ${i + 1}/${imageUrls.length}`, { url: imageUrl });
         
         try {
-          // Download image
-          const filename = `image_${Date.now()}_${i}.jpg`;
+          // Determine file extension from URL
+          const urlExt = imageUrl.split('.').pop().split('?')[0].toLowerCase();
+          const ext = ['jpg', 'jpeg', 'png', 'webp'].includes(urlExt) ? urlExt : 'jpg';
+          const filename = `vinted_image_${Date.now()}_${i}.${ext}`;
           const filepath = path.join(tempDir, filename);
           
+          // Download image to temp file
+          logger.info(`Downloading image from ${imageUrl}...`);
           await new Promise((resolve, reject) => {
             const protocol = imageUrl.startsWith('https') ? https : http;
-            const file = fs.createWriteStream(filepath);
+            const file = fsSync.createWriteStream(filepath);
             
             protocol.get(imageUrl, (response) => {
+              if (response.statusCode !== 200) {
+                reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+                return;
+              }
+              
               response.pipe(file);
+              
               file.on('finish', () => {
                 file.close();
+                logger.info(`✓ Downloaded to ${filepath}`);
                 resolve();
               });
+              
+              file.on('error', (err) => {
+                fsSync.unlink(filepath, () => {});
+                reject(err);
+              });
             }).on('error', (err) => {
-              fs.unlink(filepath, () => {});
+              fsSync.unlink(filepath, () => {});
               reject(err);
             });
           });
           
-          logger.info(`Downloaded image to ${filepath}`);
+          // Verify file exists and has size
+          const stats = await fs.stat(filepath);
+          logger.info(`File size: ${stats.size} bytes`);
           
-          // Upload to Vinted - handle hidden inputs by using evaluate
-          try {
-            // Try standard setInputFiles first
-            await fileInput.setInputFiles(filepath, { timeout: 5000 });
-            logger.info(`Uploaded image ${i + 1} to Vinted via setInputFiles`);
-          } catch (e) {
-            // If standard method fails, try with evaluate (works for hidden inputs)
-            logger.warn(`Standard upload failed, trying evaluate method: ${e.message}`);
-            const uploaded = await page.evaluate(async (selector, filePath) => {
-              const input = document.querySelector(selector);
-              if (!input) return false;
-              // Trigger file change event manually
-              const event = new Event('change', { bubbles: true });
-              input.dispatchEvent(event);
-              return true;
-            }, foundSelector);
-            
-            if (!uploaded) {
-              throw new Error('Could not trigger file input via evaluate');
-            }
-            
-            // Retry setInputFiles after making input visible
-            await fileInput.setInputFiles(filepath, { timeout: 5000 });
-            logger.info(`Uploaded image ${i + 1} to Vinted via evaluate method`);
+          if (stats.size === 0) {
+            throw new Error('Downloaded file is empty');
           }
+          
+          // Upload to Vinted using Playwright's setInputFiles
+          // This works even for hidden inputs - Playwright handles it internally
+          logger.info(`Uploading to Vinted via file input...`);
+          await fileInput.setInputFiles(filepath);
+          logger.info(`✓ Image ${i + 1} uploaded successfully`);
           
           uploadedFiles.push(filepath);
           
-          // Wait for upload to process
-          await playwrightService.randomDelay(1000, 2000);
+          // Wait for Vinted to process the upload
+          // Check for upload progress indicators
+          await playwrightService.randomDelay(1500, 2500);
           
         } catch (error) {
-          logger.error(`Failed to process image ${i + 1}`, { error: error.message });
-          // Continue with next image
+          logger.error(`Failed to process image ${i + 1}`, { 
+            error: error.message,
+            url: imageUrl
+          });
+          // Continue with next image instead of failing completely
         }
       }
       
+      // Wait a bit more for all uploads to finish processing
+      if (uploadedFiles.length > 0) {
+        logger.info('Waiting for uploads to complete processing...');
+        await playwrightService.randomDelay(2000, 3000);
+      }
+      
       // Clean up temp files
+      logger.info('Cleaning up temporary files...');
       for (const filepath of uploadedFiles) {
         try {
-          if (fs.existsSync(filepath)) {
-            fs.unlinkSync(filepath);
-            logger.info(`Deleted temp file: ${filepath}`);
+          if (fsSync.existsSync(filepath)) {
+            await fs.unlink(filepath);
+            logger.info(`Deleted temp file: ${path.basename(filepath)}`);
           }
         } catch (e) {
-          logger.warn(`Could not delete temp file: ${filepath}`);
+          logger.warn(`Could not delete temp file: ${filepath}`, { error: e.message });
         }
       }
       
@@ -789,10 +785,11 @@ class VintedService {
         return { success: false, error: 'No images could be uploaded' };
       }
       
+      logger.info(`✓ Successfully uploaded ${uploadedFiles.length} photo(s)`);
       return { success: true, uploadedCount: uploadedFiles.length };
       
     } catch (error) {
-      logger.error('Photo upload failed', { error: error.message });
+      logger.error('Photo upload failed', { error: error.message, stack: error.stack });
       return { success: false, error: error.message };
     }
   }
